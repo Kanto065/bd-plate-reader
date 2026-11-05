@@ -16,17 +16,31 @@ Output names (copied to models/ and also to OUT_DIR/models for safekeeping):
 """
 import shutil
 import sys
+from pathlib import Path
 
 import config
 
 TARGET_TOTAL_MB = 15.0
 
 
-def find_tflite(weights):
-    folder = weights.parent / (weights.stem + "_saved_model")
-    candidates = sorted(folder.glob("*int8*.tflite")) if folder.is_dir() else []
+def find_tflite(weights, returned=None):
+    """Locate the int8 .tflite after export.
+
+    Newer Ultralytics (LiteRT exporter) writes <name>_int8.tflite next to the
+    weights. Older versions wrote into <name>_saved_model/. Check the path
+    returned by export() first, then both folders.
+    """
+    if returned:
+        r = Path(str(returned))
+        if r.is_file() and r.suffix == ".tflite":
+            return r
+    folders = [weights.parent, weights.parent / (weights.stem + "_saved_model")]
+    candidates = []
+    for folder in folders:
+        if folder.is_dir():
+            candidates += sorted(folder.glob("*int8*.tflite"))
     if not candidates:
-        raise SystemExit("No int8 .tflite found in %s after export" % folder)
+        raise SystemExit("No int8 .tflite found in %s after export" % " or ".join(str(f) for f in folders))
     return candidates[0]
 
 
@@ -38,14 +52,14 @@ def export_stage(stage):
     if not weights.exists():
         raise SystemExit("Missing %s. Train this stage first." % weights)
     print("Exporting %s (imgsz %d) to int8 TFLite ..." % (s["name"], s["imgsz"]))
-    YOLO(str(weights)).export(
+    returned = YOLO(str(weights)).export(
         format="tflite",
         int8=True,
         imgsz=s["imgsz"],
         data=str(config.data_yaml(stage)),
         batch=1,
     )
-    src = find_tflite(weights)
+    src = find_tflite(weights, returned)
     config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
     (config.OUT_DIR / "models").mkdir(parents=True, exist_ok=True)
     for dest_dir in (config.MODELS_DIR, config.OUT_DIR / "models"):
