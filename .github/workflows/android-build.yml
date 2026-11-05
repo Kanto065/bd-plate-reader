@@ -2,7 +2,7 @@ name: Android build
 
 on:
   push:
-    branches: [milestone-1, milestone-3, main]
+    branches: [milestone-1, milestone-3, main, release-step]
   workflow_dispatch:
 
 jobs:
@@ -74,6 +74,8 @@ jobs:
   release:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: app
@@ -105,3 +107,16 @@ jobs:
           name: bd-plate-reader-release
           path: app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      # Publish the APK as a GitHub Release so it can be downloaded with one tap
+      # on a phone, without a GitHub login. The repository is public, so the
+      # release is public too. Runs on pushes to main and release-step only.
+      - name: Publish APK as a GitHub Release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-step')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=$(echo "$GITHUB_SHA" | cut -c1-7)
+          TAG="build-${{ github.run_number }}"
+          cp android/app/build/outputs/apk/release/app-release.apk "bd-plate-reader-${SHORT}.apk"
+          gh release create "$TAG" "bd-plate-reader-${SHORT}.apk"             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --prerelease             --title "BD Plate Reader build ${{ github.run_number }} (${SHORT})"             --notes "Standalone arm64 release APK, signed with the public debug key. For testing on your own phone only."
