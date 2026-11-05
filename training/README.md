@@ -28,6 +28,17 @@ If Colab disconnects, open the notebook again and run the cells from the top. Da
 
 If the GitHub repo is private, the clone cell fails. Either make it public for the run, or upload the `training/` folder to Drive and change the clone cell to copy it.
 
+## Finishing early: export and evaluate without training
+
+If you stop stage 2 before it ends (for example you have to leave), the `best.pt` of each stage is already saved on Drive. Use `training/colab_finish.ipynb` to export and evaluate from those files. It never trains.
+
+1. Open `training/colab_finish.ipynb` in Colab (GitHub link: `https://colab.research.google.com/github/Kanto065/bd-plate-reader/blob/finish-notebook/training/colab_finish.ipynb`, use `main` in place of `finish-notebook` once the branch is merged).
+2. Runtime, Change runtime type, GPU. Run all cells from top to bottom.
+3. It rebuilds the datasets (needed for the int8 calibration images and the test sets), prints the size and save time of both `best.pt` files and the last epoch logged, then runs `export.py` and `evaluate.py`.
+4. Download `models/plate_detector_int8.tflite`, `models/char_detector_int8.tflite` and `eval_results.json` from `My Drive/bd-plate-reader/outputs/`.
+
+`export.py` and `evaluate.py` read `best.pt` directly from the outputs folder. They do not need `last.pt` or a finished marker. A character detector from an interrupted run is a valid but partly trained model, so the scores will be lower than after a full run. To resume training later, run `colab_train.ipynb` again. It continues from `last.pt`.
+
 ## Drive layout
 
 ```
