@@ -1,0 +1,12 @@
+﻿training/data/
+node_modules/
+.venv/
+__pycache__/
+*.pt
+runs/
+app/android/build/
+app/android/app/build/
+app/android/.gradle/
+app/android/local.properties
+app/ios/Pods/
+.DS_Store
