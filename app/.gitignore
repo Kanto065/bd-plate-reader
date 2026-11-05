@@ -73,3 +73,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Trained models are copied in with npm run link:models. Not committed until reviewed.
+# To commit them on purpose, use: git add -f assets/models/*.tflite
+assets/models/*.tflite

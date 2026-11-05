@@ -1,7 +1,7 @@
 // Regenerates src/ml/classes.ts from the training files so the app and the
 // training pipeline use the same class list.
 //   node scripts/gen-classes.js          writes src/ml/classes.ts
-//   node scripts/gen-classes.js --check  exits with 1 if the file is stale
+//   node scripts/gen-classes.js check    exits with 1 if the file is stale
 const fs = require('fs');
 const path = require('path');
 
@@ -44,7 +44,7 @@ function build() {
 }
 
 const content = build();
-if (process.argv.includes('--check')) {
+if (process.argv.includes("check")) {
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
   if (current.replace(/\r\n/g, '\n') !== content) {
     console.error('src/ml/classes.ts is stale. Run: node scripts/gen-classes.js');

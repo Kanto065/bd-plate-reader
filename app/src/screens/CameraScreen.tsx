@@ -10,16 +10,23 @@ import {
 import {
   Camera,
   useCameraDevice,
+  useCameraFormat,
   useCameraPermission,
 } from 'react-native-vision-camera';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import { MAX_SIDE } from '../ml/imageLoader';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
 export default function CameraScreen({ navigation }: Props) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
+  // Ask for a photo close to 1600 x 1200. The plate reader decodes the JPEG in
+  // JavaScript, so a full resolution photo (up to 48 MP) would be far too slow.
+  const format = useCameraFormat(device, [
+    { photoResolution: { width: MAX_SIDE, height: (MAX_SIDE * 3) / 4 } },
+  ]);
   const camera = useRef<Camera>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +84,7 @@ export default function CameraScreen({ navigation }: Props) {
         ref={camera}
         style={StyleSheet.absoluteFill}
         device={device}
+        format={format}
         isActive
         photo
       />
