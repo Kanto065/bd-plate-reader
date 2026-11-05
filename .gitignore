@@ -10,3 +10,4 @@ app/android/.gradle/
 app/android/local.properties
 app/ios/Pods/
 .DS_Store
+apk/
