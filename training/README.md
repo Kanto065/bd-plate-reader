@@ -11,9 +11,10 @@ The text is rebuilt from the detected characters by `postprocess.py`, a small pu
 
 You need a Google account. The free T4 GPU is enough.
 
-1. Put the dataset zips in Google Drive at `My Drive/bd-plate-reader/data/`. The original names work, the scripts find the zips by name pattern:
+1. Put the dataset archives in Google Drive at `My Drive/bd-plate-reader/data/`. The original names work, the scripts find the files by name pattern:
    - `Bangla LPDB - A.zip` (required)
    - `NightLPD-BD Annotated Bangladeshi Nighttime Vehicl.zip` (required)
+   - `bangladeshi-license-plate-recognition_-character-recognition-DatasetNinja.tar` (recommended, extra character data and an independent test set)
    - `Bangla Licence plate detection and recognition dataset.zip` (optional, no labels, only used for a visual check)
 2. Open `training/colab_train.ipynb` in Colab. Upload it, or open it from GitHub with File, Open notebook, GitHub tab.
 3. Runtime, Change runtime type, GPU.
@@ -31,7 +32,7 @@ If the GitHub repo is private, the clone cell fails. Either make it public for t
 
 ```
 My Drive/bd-plate-reader/
-  data/       the zips above
+  data/       the archives above (zip and tar)
   outputs/    created by the scripts
 ```
 
@@ -60,6 +61,7 @@ Environment variables, all optional:
 - `BD_WORK_DIR`: scratch space for extracted and merged data. Default `/content/work` on Colab, locally `training/data/work` (git ignored).
 - `BD_OUT_DIR`: runs, weights and exports. Default is the Drive `outputs` folder on Colab, locally `training/runs`.
 - `BD_EPOCHS`, `BD_BATCH`: override epochs and batch size.
+- `BD_NINJA_TEST_ONE_PER_GROUP`: set to `1` to keep only one image per source photo in the held out Ninja test set (default keeps all copies, so about 30 percent of the Ninja images are held out).
 - `BD_FRACTION`: use only a fraction of the training set (smoke tests).
 - `BD_DEVICE`: for example `0` or `cpu`.
 - `BD_PIPELINE_DIR`: folder of vehicle photos for the optional full pipeline test in `evaluate.py`. An optional `truth.csv` with columns `file,text` gives an exact match score, where text is the class names in reading order separated by spaces, for example `Dhaka Metro Ga 2 7 8 4 7 6`.
@@ -68,11 +70,12 @@ Defaults for each stage are in `config.py`.
 
 ## Scripts
 
-- `organize_data.py`: finds the zips, extracts them (including the zip inside the NightLPD zip) into the work folder.
-- `merge_datasets.py`: validates labels, builds `plate_detector/` and `char_detector/` (80, 10, 10 split with a fixed seed), writes `data.yaml` for each and `classes.txt`.
+- `organize_data.py`: finds the zips and the tar, extracts them safely (including the zip inside the NightLPD zip) into the work folder.
+- `merge_datasets.py`: validates labels, builds `plate_detector/` and `char_detector/` (LPDB-A split 80, 10, 10 with a fixed seed), writes `data.yaml` for each and `classes.txt`. For the character set it adds the DatasetNinja photos and writes `data_test_ninja.yaml` for the held out Ninja test set.
+- `ninja_convert.py`: reads the Supervisely format of DatasetNinja, converts boxes to YOLO, groups images by source photo and splits by group. `ninja_class_map.json` maps the 27 Ninja class names to the unified class names, checked by eye (see `docs/dataset_notes.md`).
 - `train.py plate|chars`: Ultralytics YOLO11n training with resume.
 - `export.py`: int8 TFLite export, copies the files to `models/` and reports sizes against the 15 MB target.
-- `evaluate.py`: mAP on the test split, plate level exact match, optional full pipeline test.
+- `evaluate.py`: mAP and plate level exact match on both held out character sets (LPDB-A test split and DatasetNinja held out photos, reported separately), plus an optional full pipeline test.
 - `postprocess.py`: line grouping, left to right sorting, class mapping, plate string. Tests in `tests/`.
 - `class_display_bn.json`: class name to Bangla text, used for the final plate string.
 - `colab_train.ipynb`: all of the above in one notebook.
@@ -83,12 +86,14 @@ Defaults for each stage are in `config.py`.
 - Stage 2 uses input 416 because it sees tight plate crops with up to about 11 characters. The smallest character stays around 30 pixels wide, enough to separate similar letters, while the model stays cheap on a phone.
 - Stage 2 drops a whole plate if any one of its boxes is invalid, because a plate with a missing character label would teach a wrong sequence.
 - Stage 1 merges daytime and night images, and each source is split separately so night images appear in train, val and test.
+- DatasetNinja images come from Roboflow, where one source photo appears as up to four copies (the original and augmentations). The split is done per source photo (the file name text before `.rf.`), never per image, so no copy of a held out photo is used for training. About 70 percent of the Ninja images go to stage 2 training (a small part of them to val) and about 30 percent are held out as a second, independent test set.
+- Ninja contributes about two thirds of the stage 2 training images, and many of them are heavily augmented copies. If the character model looks over fitted to the Ninja look, try training on LPDB-A plus only one copy per Ninja source photo.
 
 ## What the evaluation does and does not tell you
 
-- mAP is measured on a held out test split of the same datasets, so it is optimistic for photos taken in other conditions.
+- mAP is measured on held out test sets, so it is optimistic for photos taken in other conditions. The LPDB-A test split comes from the same source as the training plates. The DatasetNinja test set is a different distribution, so its numbers are the more honest ones. Expect them to be lower.
 - The exact match score is at plate crop level (character model on ground truth crops). The vehicle photos in the dataset have no plate text, so a true end to end score needs your own labeled photos (`BD_PIPELINE_DIR` with `truth.csv`). Add 200 to 300 phone photos from Dhaka for this, as planned in CLAUDE.md.
-- Several district classes have fewer than 20 training examples (see `docs/dataset_notes.md`). Expect weaker results on those.
+- 28 district and letter classes have fewer than 20 LPDB-A training examples (see `docs/dataset_notes.md`). DatasetNinja does not help with these, because its 27 classes are mostly common ones. Expect weaker results on the rare districts.
 
 ## Licenses
 

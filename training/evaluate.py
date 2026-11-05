@@ -8,11 +8,15 @@ exported .tflite files to check the quantized models.
 
 Reports:
   1. Detection mAP50 and mAP50-95 for the plate detector and the character
-     detector (Ultralytics validation on the test split).
-  2. Plate level exact match for the character stage: run the character model on
-     each test plate crop, rebuild the plate with postprocess.py, and compare the
-     character sequence with the ground truth rebuilt from the label file. Also
-     prints the mean character error rate (edit distance over length).
+     detector (Ultralytics validation on the test split). The character detector
+     has two independent held out sets, reported separately: the LPDB-A test
+     split, and the DatasetNinja photos held out by source photo. Ninja is a
+     different distribution, so its number is the honest generalization check.
+  2. Plate level exact match for the character stage, for both held out sets:
+     run the character model on each test plate crop, rebuild the plate with
+     postprocess.py, and compare the character sequence with the ground truth
+     rebuilt from the label file. Also prints the mean character error rate
+     (edit distance over length).
   3. Optional full pipeline run (plate detector, crop, character model) on a
      folder of vehicle photos given by BD_PIPELINE_DIR. If the folder contains
      truth.csv with the columns file,text (text in the same English token form
@@ -61,20 +65,27 @@ def predict_dets(model, image, imgsz):
     return out
 
 
-def map_scores(model, stage):
+def map_scores(model, stage, yaml_path=None):
+    """mAP on the 'test' entry of a data yaml (default: the stage data.yaml)."""
     s = config.STAGES[stage]
     batch = 1 if str(model.ckpt_path or "").endswith(".tflite") else 16
-    r = model.val(data=str(config.data_yaml(stage)), split="test", imgsz=s["imgsz"], batch=batch, plots=False, verbose=False)
+    data = str(yaml_path or config.data_yaml(stage))
+    r = model.val(data=data, split="test", imgsz=s["imgsz"], batch=batch, plots=False, verbose=False)
     return {"mAP50": float(r.box.map50), "mAP50_95": float(r.box.map)}
 
 
-def crop_exact_match(model, names):
+def crop_exact_match(model, names, part="test"):
+    """Plate level exact match on a held out folder of the character dataset.
+
+    part is 'test' (the LPDB-A test split) or 'test_ninja' (the DatasetNinja
+    photos held out, split by source photo).
+    """
     s = config.STAGES["chars"]
     root = config.DATASETS_DIR / "char_detector"
-    images = sorted(p for p in (root / "images" / "test").iterdir() if p.suffix.lower() in IMG_EXTS)
+    images = sorted(p for p in (root / "images" / part).iterdir() if p.suffix.lower() in IMG_EXTS)
     exact, cer_sum, wrong = 0, 0.0, []
     for img in images:
-        gt = pp.plate_tokens(read_gt(root / "labels" / "test" / (img.stem + ".txt")), names)
+        gt = pp.plate_tokens(read_gt(root / "labels" / part / (img.stem + ".txt")), names)
         pred = pp.plate_tokens(predict_dets(model, img, s["imgsz"]), names)
         if gt == pred:
             exact += 1
@@ -168,14 +179,26 @@ def main(argv):
     plate_model, char_model = YOLO(plate_w), YOLO(char_w)
     results = {}
 
-    print("\n1. Detection mAP on the test split")
+    ninja_yaml = config.DATASETS_DIR / "char_detector" / "data_test_ninja.yaml"
+    has_ninja = ninja_yaml.exists()
+
+    print("\n1. Detection mAP on the held out test sets (reported separately)")
     results["plate_detector"] = map_scores(plate_model, "plate")
-    results["char_detector"] = map_scores(char_model, "chars")
+    results["char_detector_lpdb_test"] = map_scores(char_model, "chars")
+    if has_ninja:
+        results["char_detector_ninja_test"] = map_scores(char_model, "chars", ninja_yaml)
     print("  ", json.dumps(results, indent=2))
 
-    print("\n2. Plate level exact match on test crops")
-    results["crop_exact_match"] = crop_exact_match(char_model, names)
-    print("  ", results["crop_exact_match"])
+    print("\n2. Plate level exact match on test crops (reported separately)")
+    print("  LPDB-A test split:")
+    results["crop_exact_match_lpdb_test"] = crop_exact_match(char_model, names, "test")
+    print("  ", results["crop_exact_match_lpdb_test"])
+    if has_ninja:
+        print("  DatasetNinja held out photos (a different distribution, an honest generalization check):")
+        results["crop_exact_match_ninja_test"] = crop_exact_match(char_model, names, "test_ninja")
+        print("  ", results["crop_exact_match_ninja_test"])
+    else:
+        print("  No DatasetNinja test set found, skipped.")
 
     folder = os.environ.get("BD_PIPELINE_DIR")
     if folder:

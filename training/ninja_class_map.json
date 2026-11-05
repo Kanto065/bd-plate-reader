@@ -1,0 +1,33 @@
+{
+  "_note": "Maps DatasetNinja class titles to names in training/classes.txt. Every entry was checked by eye on real plate crops from both datasets (Milestone 2). Classes that could not be mapped with confidence are listed under unmapped and are left out.",
+  "classes": {
+    "0": "0", "1": "1", "2": "2", "3": "3", "4": "4",
+    "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
+    "metro": "Metro",
+    "dhaka": "Dhaka",
+    "khulna": "Khulna",
+    "jashore": "Jessore",
+    "chattogram": "Chatto",
+    "ba": "Ba",
+    "ca": "Cha",
+    "da": "Da",
+    "ga": "Ga",
+    "gha": "Gha",
+    "ha": "Ha",
+    "ja": "Ja",
+    "ka": "Ka",
+    "kha": "Kha",
+    "na": "Na",
+    "ta": "Ta",
+    "va": "Bha"
+  },
+  "unmapped": [],
+  "verification": {
+    "chattogram": "Maps to Chatto, not Chattogram. The Ninja crops and plates show the short word (chatto) used on Chattogram Metro plates. Box shape agrees: median width to height ratio 1.14 in Ninja, 1.04 for LPDB-A Chatto, 1.95 for LPDB-A Chattogram.",
+    "va": "Maps to Bha (the letter ভ). Name differs because Ninja uses the Bengali va transliteration.",
+    "ca": "Maps to Cha (the letter চ), not Chha (ছ). Clean plates show চ.",
+    "da": "Maps to Da (the letter ড with a dot below). LPDB-A DA is দ and Dha is ঢ, so these were checked on clear plates.",
+    "ta": "Maps to Ta (the letter ট). LPDB-A Tha is থ and THA is ঠ.",
+    "jashore": "Maps to Jessore. Both show the word যশোর, aspect ratio 2.26 versus 2.20."
+  }
+}
