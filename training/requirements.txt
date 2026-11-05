@@ -1,0 +1,9 @@
+# Training dependencies for BD Plate Reader.
+# Versions are left open on purpose: Colab ships its own torch and CUDA build,
+# and pinning torch here would replace it. Install with: pip install -r requirements.txt
+ultralytics
+opencv-python
+pyyaml
+tqdm
+numpy
+pytest

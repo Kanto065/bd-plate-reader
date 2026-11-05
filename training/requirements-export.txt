@@ -1,0 +1,9 @@
+# Extra packages for the int8 TFLite export. Ultralytics installs what it needs
+# the first time you export, so on Colab you usually do not need this file.
+# Run the export on Linux or Colab. It is slow and fragile on Windows.
+tensorflow
+onnx
+onnx2tf
+onnxslim
+sng4onnx
+onnx_graphsurgeon

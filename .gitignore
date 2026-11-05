@@ -1,7 +1,9 @@
 ﻿training/data/
+training/runs/
 node_modules/
 .venv/
 __pycache__/
+.pytest_cache/
 *.pt
 runs/
 app/android/build/
