@@ -2,5 +2,5 @@
 // A value is null when the model file is not bundled, and the app then
 // falls back to the placeholder plate.
 
-export const PLATE_MODEL: number | null = null;
-export const CHAR_MODEL: number | null = null;
+export const PLATE_MODEL: number | null = require('../../assets/models/plate_detector_int8.tflite');
+export const CHAR_MODEL: number | null = require('../../assets/models/char_detector_int8.tflite');

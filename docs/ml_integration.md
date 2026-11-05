@@ -51,7 +51,49 @@ contains the models if they are committed.
 If the class list changes, run `npm run gen:classes`. `npm run check:classes`
 fails when `src/ml/classes.ts` is out of date, and CI runs it.
 
-## Expected model shapes
+## Verified on the real models (integrate-models branch)
+
+Both files were inspected with Python ai-edge-litert. They were exported by
+Ultralytics 8.4.202 through the LiteRT exporter, so they differ from older
+TFLite exports in one important way: the input is planar.
+
+| | Plate detector | Character detector |
+|---|---|---|
+| Input shape | `[1, 3, 640, 640]` NCHW | `[1, 3, 416, 416]` NCHW |
+| Input dtype | float32, no quantization (scale 0, zero point 0) | same |
+| Output shape | `[1, 5, 8400]` | `[1, 106, 3549]` |
+| Output dtype | float32, no quantization | same |
+| Box values | normalized 0..1, center x, y, width, height | same |
+| Scores | already sigmoid, 0..1, no objectness | same |
+| File size | 3.06 MB | 3.08 MB |
+
+Weights are int8 inside, but the graph quantizes and dequantizes at the edges,
+so the app sees plain float32 and needs no `inputQuant` or `outputQuant`.
+
+What changed in the app because of this:
+
+* `plateReader.ts` now reorders the letterboxed HWC tensor to CHW
+  (`hwcToChw` in `imageOps.ts`) when the input shape is `[1, 3, H, W]`. Older
+  NHWC models still work.
+* `plateLowScore` went from 0.5 to 0.3. The plate detector's best score on
+  four sample photos was 0.5020 every time (the score range is coarse), so a
+  0.5 limit would flag nearly every read.
+* `decodeYolo` auto detection picks channels first and normalized boxes, which
+  matches the real tensors. No change was needed.
+
+Numerical check: `__tests__/ml/realModelOutput.test.ts` decodes raw outputs
+saved from the real models for two public dataset photos
+(`__tests__/fixtures/real_model_outputs.json`, only anchors scoring above 0.1).
+The TS decode, NMS and post-processing give `ঢাকা মেট্রো-গ ৩৯-১৪৭৩` and
+`রাজ মেট্রো-ব ১১-০১৫৭`, which match what is printed on the plates. The Python
+reference also showed plate boxes close to the dataset labels on four photos.
+The character model often outputs many duplicate boxes, NMS removes them.
+
+Still not verified: the JPEG decode and letterbox in JavaScript against the
+Python resize, fast-tflite loading these LiteRT files, speed, and accuracy over
+a held out set.
+
+## Expected model shapes (before the models existed)
 
 These are the shapes Ultralytics YOLO11n TFLite exports usually have.
 **Verify them against the real files** (see the checklist below).
