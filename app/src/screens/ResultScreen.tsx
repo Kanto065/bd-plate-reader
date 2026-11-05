@@ -19,6 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 export default function ResultScreen({ navigation, route }: Props) {
   const { imageUri, source } = route.params;
   const [text, setText] = useState('');
+  const [lowConfidence, setLowConfidence] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,12 +30,14 @@ export default function ResultScreen({ navigation, route }: Props) {
     readPlate(imageUri)
       .then(result => {
         if (!cancelled) {
-          setText(result);
+          setText(result.text);
+          setLowConfidence(result.lowConfidence);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setText('');
+          setLowConfidence(true);
         }
       })
       .finally(() => {
@@ -83,6 +86,9 @@ export default function ResultScreen({ navigation, route }: Props) {
         style={styles.preview}
         resizeMode="contain"
       />
+      {!loading && lowConfidence ? (
+        <Text style={styles.hint}>Check the characters before copying</Text>
+      ) : null}
       <Text style={styles.label}>Plate text (you can edit it)</Text>
       {loading ? (
         <ActivityIndicator size="large" color="#0b6e4f" style={styles.loader} />
@@ -115,6 +121,15 @@ const styles = StyleSheet.create({
     height: 240,
     borderRadius: 12,
     backgroundColor: '#eeeeee',
+  },
+  hint: {
+    marginTop: 16,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#fff4d6',
+    color: '#7a5200',
+    fontSize: 15,
+    fontWeight: '600',
   },
   label: { fontSize: 14, color: '#555555', marginTop: 20, marginBottom: 6 },
   loader: { marginVertical: 24 },
