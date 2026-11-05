@@ -22,6 +22,7 @@ export default function CameraScreen({ navigation }: Props) {
   const device = useCameraDevice('back');
   const camera = useRef<Camera>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hasPermission) {
@@ -34,13 +35,16 @@ export default function CameraScreen({ navigation }: Props) {
       return;
     }
     setBusy(true);
+    setError(null);
     try {
       const photo = await camera.current.takePhoto({ flash: 'off' });
       navigation.replace('Result', {
         imageUri: `file://${photo.path}`,
         source: 'camera',
       });
-    } catch {
+    } catch (e) {
+      console.warn('takePhoto failed', e);
+      setError(e instanceof Error ? e.message : 'Could not take the photo.');
       setBusy(false);
     }
   };
@@ -73,9 +77,10 @@ export default function CameraScreen({ navigation }: Props) {
         ref={camera}
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={!busy}
+        isActive
         photo
       />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <View style={styles.bar}>
         {busy ? (
           <ActivityIndicator color="#ffffff" size="large" />
@@ -105,6 +110,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  errorText: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
+    color: '#ffffff',
+    backgroundColor: '#b00020',
+    padding: 10,
+    borderRadius: 8,
+  },
   bar: {
     position: 'absolute',
     bottom: 40,
