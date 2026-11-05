@@ -267,6 +267,18 @@ export function letterbox(img: RgbImage, size: number): Letterboxed {
   return { tensor, size, scale, padX, padY };
 }
 
+/** Reorder an interleaved HWC tensor (size x size x 3) to planar CHW. */
+export function hwcToChw(tensor: Float32Array, size: number): Float32Array {
+  const plane = size * size;
+  const out = new Float32Array(plane * 3);
+  for (let i = 0, j = 0; i < plane; i++) {
+    out[i] = tensor[j++];
+    out[plane + i] = tensor[j++];
+    out[2 * plane + i] = tensor[j++];
+  }
+  return out;
+}
+
 /**
  * Convert a box given in normalized letterboxed coordinates (0..1 of the model
  * input) to pixel coordinates of the original image.

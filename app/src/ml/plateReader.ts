@@ -13,6 +13,7 @@ import { CLASS_DISPLAY, CLASS_NAMES } from './classes';
 import {
   RgbImage,
   cropRgb,
+  hwcToChw,
   letterbox,
   padBox,
   unletterboxBox,
@@ -75,7 +76,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   },
   platePadding: 0.05,
   charMinConf: 0.25,
-  plateLowScore: 0.5,
+  plateLowScore: 0.3,
 };
 
 export interface ModelPair {
@@ -97,7 +98,12 @@ async function detect(
   stage: StageConfig,
 ) {
   const inType = model.inputs[0]?.dataType ?? 'float32';
-  const input = floatToBuffer(tensor, inType, stage.inputQuant);
+  // The LiteRT exports take planar input [1, 3, H, W]. Older TFLite exports
+  // take [1, H, W, 3]. The letterbox tensor is HWC, so reorder when needed.
+  const inShape = model.inputs[0]?.shape ?? [];
+  const planar = inShape.length === 4 && inShape[1] === 3 && inShape[3] !== 3;
+  const ordered = planar ? hwcToChw(tensor, stage.inputSize) : tensor;
+  const input = floatToBuffer(ordered, inType, stage.inputQuant);
   const outputs = await model.run([input]);
   const info = model.outputs[0];
   if (!info || outputs.length === 0) {

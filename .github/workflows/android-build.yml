@@ -2,7 +2,7 @@ name: Android build
 
 on:
   push:
-    branches: [milestone-1, milestone-3, main]
+    branches: [milestone-1, milestone-3, integrate-models, main]
   workflow_dispatch:
 
 jobs:

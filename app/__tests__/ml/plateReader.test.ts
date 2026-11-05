@@ -126,7 +126,7 @@ test('a dropped character changes the digit count and flags low confidence', asy
 });
 
 test('an unsure plate box flags low confidence', async () => {
-  const plate = fakeModel(plateOutput(0.4), plateShape);
+  const plate = fakeModel(plateOutput(0.28), plateShape);
   const chars = fakeModel(charOutput(charRows()), charShape);
   const result = await runPipeline({ plate, chars }, grayImage(640, 480));
   expect(result.plateFound).toBe(true);
