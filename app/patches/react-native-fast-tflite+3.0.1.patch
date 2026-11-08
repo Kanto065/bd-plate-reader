@@ -1,3 +1,28 @@
+diff --git a/node_modules/react-native-fast-tflite/android/build.gradle b/node_modules/react-native-fast-tflite/android/build.gradle
+index 2e0abd0..b35fad2 100644
+--- a/node_modules/react-native-fast-tflite/android/build.gradle
++++ b/node_modules/react-native-fast-tflite/android/build.gradle
+@@ -133,14 +133,14 @@ dependencies {
+   implementation project(":react-native-nitro-modules")
+ 
+   // Tensorflow Lite .aar (includes C API via prefabs)
+-  implementation "com.google.ai.edge.litert:litert:1.4.0"
+-  extractSO("com.google.ai.edge.litert:litert:1.4.0")
+-  extractHeaders("com.google.ai.edge.litert:litert:1.4.0")
++  implementation "com.google.ai.edge.litert:litert:1.4.2"
++  extractSO("com.google.ai.edge.litert:litert:1.4.2")
++  extractHeaders("com.google.ai.edge.litert:litert:1.4.2")
+ 
+   // Tensorflow Lite GPU delegate
+-  implementation "com.google.ai.edge.litert:litert-gpu:1.4.0"
+-  extractSO("com.google.ai.edge.litert:litert-gpu:1.4.0")
+-  extractHeaders("com.google.ai.edge.litert:litert-gpu:1.4.0")
++  implementation "com.google.ai.edge.litert:litert-gpu:1.4.2"
++  extractSO("com.google.ai.edge.litert:litert-gpu:1.4.2")
++  extractHeaders("com.google.ai.edge.litert:litert-gpu:1.4.2")
+ }
+ 
+ // Clean leftover empty directories
 diff --git a/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt b/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt
 index c2360f5..004f776 100644
 --- a/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt
