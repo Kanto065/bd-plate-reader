@@ -246,7 +246,7 @@ Measured on 64 hand labeled photos that the models never saw (bikes and private
 vehicles from the Mendeley "Vehicle License Plate Detection Dataset V1", only
 legible plates labeled, so the numbers are slightly optimistic):
 
-| Model | Exact match | Character error rate |
+| Model (tilt aware reader) | Exact match | Character error rate |
 |---|---|---|
 | full int8 | 87.5% | 3.3% |
 | dynamic range | 95.3% | 1.6% |
@@ -260,8 +260,8 @@ To regenerate: set `BD_EXPORT_DTYPE=dynamic` and run `training/export.py` (noteb
 `training/colab_export_modes.ipynb`), then copy `plate_detector_dynamic.tflite` and
 `char_detector_dynamic.tflite` over the `_int8` names in `app/assets/models`.
 Score any set of models with `training/pipeline_eval.py` and `BD_MODEL_SUFFIX`.
-The dynamic models were not timed on the phone before this change, see the
-timing numbers in the release notes.
+On a Galaxy A12 the dynamic models score 96.9% on the same photos and take about 1.4 s
+per photo (full int8 took about 1.2 s).
 
 ## Self test on a phone (test only)
 
