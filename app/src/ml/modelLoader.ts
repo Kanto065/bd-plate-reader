@@ -7,7 +7,7 @@
  * placeholder path free of native dependencies.
  */
 import { CHAR_MODEL, PLATE_MODEL } from './modelAssets';
-import type { ModelHandle, ModelPair } from './plateReader';
+import type { ModelHandle, ModelPair, TensorInfo } from './plateReader';
 
 let cached: Promise<ModelPair | null> | null = null;
 
@@ -22,6 +22,11 @@ async function load(source: number): Promise<ModelHandle> {
   // An empty delegate list means the default CPU delegate. Try 'nnapi' or
   // 'android-gpu' later once accuracy and speed are measured on the device.
   const model = await loadTensorflowModel(source, []);
+  // The first run builds the CPU kernels and is much slower than later runs,
+  // so do it here with zeros, in the background at app start.
+  const bytes = (info: TensorInfo) =>
+    info.shape.reduce((a, b) => a * b, 1) * (info.dataType === 'float32' ? 4 : 1);
+  await model.run([new ArrayBuffer(bytes(model.inputs[0]))]);
   return {
     inputs: model.inputs,
     outputs: model.outputs,

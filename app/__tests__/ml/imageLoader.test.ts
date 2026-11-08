@@ -71,3 +71,23 @@ test('rejects images above the pixel limit before decoding', () => {
   ]);
   expect(() => decodeJpegBytes(bytes)).toThrow(/too large/);
 });
+
+describe('native decoder', () => {
+  const { NativeModules } = require('react-native');
+  afterEach(() => {
+    delete NativeModules.PlateImage;
+  });
+
+  test('loadRgbImage uses the native decoder and turns base64 into RGB bytes', async () => {
+    const { loadRgbImage, NATIVE_MAX_SIDE } = require('../../src/ml/imageLoader');
+    // Two pixels: red, then blue.
+    const data = '/wAAAAD/'; // bytes 255,0,0,0,0,255
+    const decode = jest.fn().mockResolvedValue({ width: 2, height: 1, data });
+    NativeModules.PlateImage = { decode };
+    const img = await loadRgbImage('file:///photo.jpg');
+    expect(decode).toHaveBeenCalledWith('file:///photo.jpg', NATIVE_MAX_SIDE);
+    expect(img.width).toBe(2);
+    expect(img.height).toBe(1);
+    expect(Array.from(img.data)).toEqual([255, 0, 0, 0, 0, 255]);
+  });
+});

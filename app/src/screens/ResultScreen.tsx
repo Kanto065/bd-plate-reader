@@ -91,7 +91,7 @@ export default function ResultScreen({ navigation, route }: Props) {
         resizeMode="contain"
       />
       {!loading && error ? <Text style={styles.error}>{error}</Text> : null}
-      {!loading && lowConfidence ? (
+      {!loading && !error && lowConfidence ? (
         <Text style={styles.hint}>Check the characters before copying</Text>
       ) : null}
       <Text style={styles.label}>Plate text (you can edit it)</Text>

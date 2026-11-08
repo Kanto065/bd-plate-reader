@@ -7,6 +7,7 @@
  * on the long side (see MAX_SIDE), and anything above MAX_PIXELS is rejected
  * before decoding instead of freezing the app.
  */
+import { NativeModules } from 'react-native';
 import jpeg from 'jpeg-js';
 import { timed, timedAsync } from './timing';
 import {
@@ -16,6 +17,9 @@ import {
   readExifOrientation,
   readJpegSize,
 } from './imageOps';
+
+// Provided by Hermes, but missing from this project's TypeScript libs.
+declare function atob(data: string): string;
 
 /** Long side, in pixels, requested from the camera and the gallery picker. */
 export const MAX_SIDE = 1600;
@@ -52,7 +56,37 @@ export function decodeJpegBytes(bytes: Uint8Array): RgbImage {
   );
 }
 
+/** Long side requested from the native decoder. The detectors only see 640 px. */
+export const NATIVE_MAX_SIDE = 1280;
+
+interface NativeDecoded {
+  width: number;
+  height: number;
+  data: string; // base64 RGB
+}
+
+/** Android only. Read lazily so tests can install a fake. */
+function nativeDecoder() {
+  return NativeModules.PlateImage as
+    | { decode(uri: string, maxSide: number): Promise<NativeDecoded> }
+    | undefined;
+}
+
 export async function loadRgbImage(uri: string): Promise<RgbImage> {
+  const native = nativeDecoder();
+  if (native) {
+    const r = await timedAsync('nativeDecode', () =>
+      native.decode(uri, NATIVE_MAX_SIDE),
+    );
+    return timed('base64', () => {
+      const bin = atob(r.data);
+      const data = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        data[i] = bin.charCodeAt(i);
+      }
+      return { data, width: r.width, height: r.height };
+    });
+  }
   const buffer = await timedAsync('fileRead', async () => {
     const response = await fetch(uri);
     return response.arrayBuffer();
