@@ -8,6 +8,7 @@
  * before decoding instead of freezing the app.
  */
 import jpeg from 'jpeg-js';
+import { timed, timedAsync } from './timing';
 import {
   RgbImage,
   applyExifOrientation,
@@ -34,21 +35,27 @@ export function decodeJpegBytes(bytes: Uint8Array): RgbImage {
       'Image is too large (' + size.width + ' x ' + size.height + ')',
     );
   }
-  const decoded = jpeg.decode(bytes, {
-    useTArray: true,
-    formatAsRGBA: false,
-    maxMemoryUsageInMB: 256,
-  });
+  const decoded = timed('jpegDecode', () =>
+    jpeg.decode(bytes, {
+      useTArray: true,
+      formatAsRGBA: false,
+      maxMemoryUsageInMB: 256,
+    }),
+  );
   const img: RgbImage = {
     data: decoded.data,
     width: decoded.width,
     height: decoded.height,
   };
-  return applyExifOrientation(img, readExifOrientation(bytes));
+  return timed('exifRotate', () =>
+    applyExifOrientation(img, readExifOrientation(bytes)),
+  );
 }
 
 export async function loadRgbImage(uri: string): Promise<RgbImage> {
-  const response = await fetch(uri);
-  const buffer = await response.arrayBuffer();
+  const buffer = await timedAsync('fileRead', async () => {
+    const response = await fetch(uri);
+    return response.arrayBuffer();
+  });
   return decodeJpegBytes(new Uint8Array(buffer));
 }

@@ -13,6 +13,7 @@
 import { loadRgbImage } from '../ml/imageLoader';
 import { loadModels } from '../ml/modelLoader';
 import { runPipeline } from '../ml/plateReader';
+import { getTiming, resetTiming, timedAsync } from '../ml/timing';
 
 export const PLACEHOLDER_PLATE = 'ঢাকা মেট্রো-ঘ ১১-২৩৪৫';
 
@@ -24,9 +25,11 @@ export interface PlateResult {
 }
 
 export async function readPlate(imageUri: string): Promise<PlateResult> {
+  resetTiming();
+  const startedAt = Date.now();
   let models;
   try {
-    models = await loadModels();
+    models = await timedAsync('modelLoad', loadModels);
   } catch (error) {
     console.warn('Could not load the models', error);
     return { text: '', lowConfidence: true, error: 'The plate models failed to load.' };
@@ -38,6 +41,10 @@ export async function readPlate(imageUri: string): Promise<PlateResult> {
   try {
     const image = await loadRgbImage(imageUri);
     const result = await runPipeline(models, image);
+    console.log(
+      'PLATE_TIMING',
+      JSON.stringify({ totalMs: Date.now() - startedAt, ...getTiming() }),
+    );
     return { text: result.text, lowConfidence: result.lowConfidence };
   } catch (error) {
     console.warn('Plate reading failed', error);

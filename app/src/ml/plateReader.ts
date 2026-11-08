@@ -20,6 +20,7 @@ import {
 } from './imageOps';
 import { readPlateDetailed } from './postprocess';
 import { QuantParams, bufferToFloat, floatToBuffer } from './quant';
+import { timed, timedAsync } from './timing';
 import { decodeYolo, nms } from './yolo';
 
 export interface TensorInfo {
@@ -96,28 +97,33 @@ async function detect(
   model: ModelHandle,
   tensor: Float32Array,
   stage: StageConfig,
+  name: string,
 ) {
   const inType = model.inputs[0]?.dataType ?? 'float32';
   // The LiteRT exports take planar input [1, 3, H, W]. Older TFLite exports
   // take [1, H, W, 3]. The letterbox tensor is HWC, so reorder when needed.
   const inShape = model.inputs[0]?.shape ?? [];
   const planar = inShape.length === 4 && inShape[1] === 3 && inShape[3] !== 3;
-  const ordered = planar ? hwcToChw(tensor, stage.inputSize) : tensor;
-  const input = floatToBuffer(ordered, inType, stage.inputQuant);
-  const outputs = await model.run([input]);
+  const input = timed(name + 'Prep', () => {
+    const ordered = planar ? hwcToChw(tensor, stage.inputSize) : tensor;
+    return floatToBuffer(ordered, inType, stage.inputQuant);
+  });
+  const outputs = await timedAsync(name + 'Run', () => model.run([input]));
   const info = model.outputs[0];
   if (!info || outputs.length === 0) {
     throw new Error('Model returned no output');
   }
-  const values = bufferToFloat(outputs[0], info.dataType, stage.outputQuant);
-  const decoded = decodeYolo(values, info.shape, {
-    inputSize: stage.inputSize,
-    scoreThreshold: stage.scoreThreshold,
-  });
-  return nms(decoded, {
-    iouThreshold: stage.iouThreshold,
-    agnostic: stage.agnosticNms,
-    maxDetections: stage.maxDetections,
+  return timed(name + 'Decode', () => {
+    const values = bufferToFloat(outputs[0], info.dataType, stage.outputQuant);
+    const decoded = decodeYolo(values, info.shape, {
+      inputSize: stage.inputSize,
+      scoreThreshold: stage.scoreThreshold,
+    });
+    return nms(decoded, {
+      iouThreshold: stage.iouThreshold,
+      agnostic: stage.agnosticNms,
+      maxDetections: stage.maxDetections,
+    });
   });
 }
 
@@ -127,8 +133,10 @@ export async function runPipeline(
   config: PipelineConfig = DEFAULT_PIPELINE_CONFIG,
 ): Promise<PipelineResult> {
   // Stage 1: find the plate.
-  const lb = letterbox(image, config.plate.inputSize);
-  const plates = await detect(models.plate, lb.tensor, config.plate);
+  const lb = timed('plateLetterbox', () =>
+    letterbox(image, config.plate.inputSize),
+  );
+  const plates = await detect(models.plate, lb.tensor, config.plate, 'plate');
   if (plates.length === 0) {
     return {
       text: '',
@@ -144,11 +152,13 @@ export async function runPipeline(
     image.width,
     image.height,
   );
-  const crop = cropRgb(image, box);
+  const crop = timed('crop', () => cropRgb(image, box));
 
   // Stage 2: read the characters on the crop.
-  const clb = letterbox(crop, config.chars.inputSize);
-  const chars = await detect(models.chars, clb.tensor, config.chars);
+  const clb = timed('charLetterbox', () =>
+    letterbox(crop, config.chars.inputSize),
+  );
+  const chars = await detect(models.chars, clb.tensor, config.chars, 'char');
 
   const read = readPlateDetailed(
     chars,
