@@ -21,9 +21,6 @@ import {
   rgbSource,
 } from './imageOps';
 
-// Provided by Hermes, but missing from this project's TypeScript libs.
-declare function atob(data: string): string;
-
 /** Long side, in pixels, requested from the camera and the gallery picker. */
 export const MAX_SIDE = 1600;
 /** Hard limit on the decoded size. 1600 x 1200 is 1.9 MP. */
@@ -71,7 +68,7 @@ interface NativeLetterboxed {
   scale: number;
   padX: number;
   padY: number;
-  data: string; // base64 RGB, size x size
+  path: string; // file with the planar float32 model input
 }
 
 /** Android only. Read lazily so tests can install a fake. */
@@ -86,6 +83,18 @@ function nativeModule() {
         ): Promise<NativeLetterboxed>;
       }
     | undefined;
+}
+
+let fileReader: { loadAsset(path: string): Promise<ArrayBuffer> } | undefined;
+
+/** Raw bytes of a file, from the native loader that react-native-fast-tflite ships. */
+function readFile(path: string): Promise<ArrayBuffer> {
+  if (!fileReader) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { NitroModules } = require('react-native-nitro-modules');
+    fileReader = NitroModules.createHybridObject('AssetLoader');
+  }
+  return fileReader!.loadAsset(path);
 }
 
 function nativeSource(
@@ -103,14 +112,17 @@ function nativeSource(
           crop && [crop.x1, crop.y1, crop.x2, crop.y2],
         ),
       );
-      return timed('base64', () => {
-        const bin = atob(r.data);
-        const tensor = new Float32Array(bin.length);
-        for (let i = 0; i < bin.length; i++) {
-          tensor[i] = bin.charCodeAt(i) / 255;
-        }
-        return { tensor, size, ...r };
-      });
+      const buffer = await timedAsync('readTensor', () => readFile(r.path));
+      return {
+        tensor: new Float32Array(buffer),
+        size,
+        planar: true,
+        scale: r.scale,
+        padX: r.padX,
+        padY: r.padY,
+        srcWidth: r.srcWidth,
+        srcHeight: r.srcHeight,
+      };
     },
     // The crop box is in pixels of the photo the native module decoded, which
     // is the srcWidth x srcHeight it reported for the full photo.

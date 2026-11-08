@@ -211,6 +211,8 @@ export interface Letterboxed {
   scale: number;
   padX: number;
   padY: number;
+  /** True when the tensor is already planar NCHW, as the native module writes it. */
+  planar?: boolean;
   /** Size of the image that was letterboxed, before any padding. */
   srcWidth: number;
   srcHeight: number;

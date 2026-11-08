@@ -8,7 +8,6 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
 import android.net.Uri
-import android.util.Base64
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.NativeModule
@@ -19,7 +18,10 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ViewManager
+import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -29,8 +31,9 @@ import kotlin.math.roundToInt
 /**
  * Photo handling for the plate reader, done with the platform decoder instead of
  * JavaScript. letterbox() decodes the photo upright (EXIF applied), optionally
- * crops a box, and returns a size x size square with gray padding as base64 RGB,
- * the same layout the JavaScript letterbox produced.
+ * crops a box, letterboxes it to a size x size square with gray padding, and
+ * writes it as the model input: planar RGB (CHW) float32 in 0..1, in a cache
+ * file. JavaScript reads the file as a raw buffer, with no per pixel work.
  */
 class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   override fun getName() = "PlateImage"
@@ -107,20 +110,25 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
     val px = IntArray(size * size)
     square.getPixels(px, 0, size, 0, 0, size, size)
-    val rgb = ByteArray(size * size * 3)
-    for (i in px.indices) {
+    val plane = size * size
+    val bytes = ByteBuffer.allocate(plane * 3 * 4).order(ByteOrder.nativeOrder())
+    val buf = bytes.asFloatBuffer()
+    for (i in 0 until plane) {
       val p = px[i]
-      rgb[i * 3] = (p shr 16).toByte()
-      rgb[i * 3 + 1] = (p shr 8).toByte()
-      rgb[i * 3 + 2] = p.toByte()
+      buf.put(i, ((p shr 16) and 0xFF) / 255f)
+      buf.put(plane + i, ((p shr 8) and 0xFF) / 255f)
+      buf.put(2 * plane + i, (p and 0xFF) / 255f)
     }
+    // One file per size, so the plate (640) and the crop (416) do not collide.
+    val file = File(reactApplicationContext.cacheDir, "plate_input_$size.f32")
+    file.writeBytes(bytes.array())
     return Arguments.createMap().apply {
       putInt("srcWidth", srcWidth)
       putInt("srcHeight", srcHeight)
       putDouble("scale", scale.toDouble())
       putInt("padX", padX)
       putInt("padY", padY)
-      putString("data", Base64.encodeToString(rgb, Base64.NO_WRAP))
+      putString("path", "file://" + file.absolutePath)
     }
   }
 }
