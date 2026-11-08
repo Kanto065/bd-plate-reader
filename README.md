@@ -18,7 +18,7 @@ Download the latest APK from the [Releases page](https://github.com/Kanto065/bd-
 3. Stage 2, character detector: YOLO11n, int8 TFLite, 102 classes (Bangla letters, digits, district and metro words). No OCR engine.
 4. Post-processing in TypeScript: group the characters into lines by y, sort each line by x, map class IDs to Bangla text, and flag low confidence.
 
-The models are about 6 MB together and load when the app opens. On a Galaxy A12, build 16 reads a photo in about 2.3 s, down from 11 s for the first version. Per stage timings are logged as `PLATE_TIMING` in logcat.
+The models are dynamic range exports (int8 weights, float activations), about 6 MB together, and load when the app opens. On a Galaxy A12 the app reads a photo in about 1.4 s, down from 11 s for the first version. Per stage timings are logged as `PLATE_TIMING` in logcat.
 
 ## Results so far
 
@@ -30,7 +30,17 @@ Float models on held-out test sets:
 | Character detector, LPDB-A test | 0.975 | 0.684 |
 | Character detector, DatasetNinja test | 0.960 | 0.692 |
 
-Exact whole-plate match on cropped plates is 84.6% (LPDB-A) and 79.2% (DatasetNinja). The int8 files and the full photo-to-text pipeline have no scored test set yet. Details are in `docs/PROJECT_STATE.md`.
+Exact whole-plate match on cropped plates is 84.6% (LPDB-A) and 79.2% (DatasetNinja).
+
+Full photo to text, on 64 hand labeled photos of bikes and private cars that the models never saw (Mendeley dataset, CC BY 4.0):
+
+| Version | Exact match |
+|---|---|
+| First models and reader | 78.1% |
+| Tilt aware reader | 87.5% |
+| Dynamic range models and tilt aware reader | 95.3% on a PC, 96.9% on a Galaxy A12 |
+
+Only white plates a person could read were labeled, so these numbers are slightly optimistic. Green plates (CNGs, buses) are not measured yet and read worse. Details and next steps are in `docs/PROJECT_STATE.md`.
 
 ## Repo layout
 
