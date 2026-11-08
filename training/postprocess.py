@@ -15,7 +15,8 @@ A BRTA plate reads, for example (English class names):
 which becomes "Dhaka Metro-Ga 27-8476". With the Bangla display map it becomes
 "ঢাকা মেট্রো-গ ২৭-৮৪৭৬".
 """
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Sequence
 
 # Series letters in the dataset class list. Digits are 0 to 9, 'Metro' is the
@@ -85,6 +86,57 @@ def group_into_lines(dets: Sequence[Detection], gap_ratio: float = 0.5) -> List[
     return [sorted(line, key=lambda d: d.x) for line in lines]
 
 
+def rotate_detections(dets: Sequence[Detection], deg: float) -> List[Detection]:
+    """Rotate box centers by deg around their centroid. Box sizes are kept."""
+    if not dets:
+        return []
+    mx = sum(d.x for d in dets) / len(dets)
+    my = sum(d.y for d in dets) / len(dets)
+    t = math.radians(deg)
+    c, s = math.cos(t), math.sin(t)
+    return [
+        replace(d, x=mx + (d.x - mx) * c - (d.y - my) * s, y=my + (d.x - mx) * s + (d.y - my) * c)
+        for d in dets
+    ]
+
+
+def _row_scatter(lines: Sequence[Sequence[Detection]]) -> float:
+    """Sum of squared y distances of each box from the mean y of its line."""
+    total = 0.0
+    for line in lines:
+        mean = sum(d.y for d in line) / len(line)
+        total += sum((d.y - mean) ** 2 for d in line)
+    return total
+
+
+def estimate_tilt(dets: Sequence[Detection], max_deg: int = 35, tolerance: float = 1.15) -> int:
+    """Find the rotation, in whole degrees, that levels a tilted plate.
+
+    Grouping by y assumes a level plate, so a plate tilted by more than a few
+    degrees is split into the wrong rows. Try every angle from -max_deg to
+    max_deg, keep the ones that give one or two rows, and take the smallest
+    angle whose rows are within `tolerance` of the tightest fit. Fewer than 4
+    boxes: no rotation. Rotate the boxes by the result before grouping.
+    A BRTA plate has one or two rows, which is why more than two is rejected.
+    """
+    if len(dets) < 4:
+        return 0
+    fits = []
+    for deg in range(-max_deg, max_deg + 1):
+        lines = group_into_lines(rotate_detections(dets, deg))
+        if len(lines) <= 2:
+            fits.append((deg, _row_scatter(lines)))
+    if not fits:
+        return 0
+    best = min(score for _, score in fits)
+    return min((deg for deg, score in fits if score <= best * tolerance + 1e-9), key=abs)
+
+
+def group_level_lines(dets: Sequence[Detection]) -> List[List[Detection]]:
+    """Group into lines after levelling a tilted plate."""
+    return group_into_lines(rotate_detections(dets, estimate_tilt(dets)))
+
+
 def lines_to_names(lines: Sequence[Sequence[Detection]], names: Sequence[str]) -> List[List[str]]:
     """Map each detection to its class name. Unknown ids become '?'."""
     out = []
@@ -136,14 +188,14 @@ def format_plate(lines_names: Sequence[Sequence[str]], display: Optional[Dict[st
 
 def read_plate(dets: Sequence[Detection], names: Sequence[str], display: Optional[Dict[str, str]] = None, min_conf: float = 0.0) -> str:
     kept = [d for d in dets if d.conf >= min_conf]
-    lines = group_into_lines(kept)
+    lines = group_level_lines(kept)
     return format_plate(lines_to_names(lines, names), display)
 
 
 def plate_tokens(dets: Sequence[Detection], names: Sequence[str], min_conf: float = 0.0) -> List[str]:
     """Reading order token list, used for exact match scoring."""
     kept = [d for d in dets if d.conf >= min_conf]
-    return flatten(lines_to_names(group_into_lines(kept), names))
+    return flatten(lines_to_names(group_level_lines(kept), names))
 
 
 def edit_distance(a: Sequence[str], b: Sequence[str]) -> int:

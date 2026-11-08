@@ -87,6 +87,82 @@ export function groupIntoLines(
   return lines.map(line => stableSortBy(line, d => d.x));
 }
 
+/** Rotate box centers by deg around their centroid. Box sizes are kept. */
+export function rotateDetections(
+  dets: readonly Detection[],
+  deg: number,
+): Detection[] {
+  if (dets.length === 0) {
+    return [];
+  }
+  const mx = dets.reduce((s, d) => s + d.x, 0) / dets.length;
+  const my = dets.reduce((s, d) => s + d.y, 0) / dets.length;
+  const t = (deg * Math.PI) / 180;
+  const c = Math.cos(t);
+  const s = Math.sin(t);
+  return dets.map(d => ({
+    ...d,
+    x: mx + (d.x - mx) * c - (d.y - my) * s,
+    y: my + (d.x - mx) * s + (d.y - my) * c,
+  }));
+}
+
+/** Sum of squared y distances of each box from the mean y of its line. */
+function rowScatter(lines: readonly (readonly Detection[])[]): number {
+  let total = 0;
+  for (const line of lines) {
+    const mean = line.reduce((s, d) => s + d.y, 0) / line.length;
+    for (const d of line) {
+      total += (d.y - mean) ** 2;
+    }
+  }
+  return total;
+}
+
+/**
+ * Find the rotation, in whole degrees, that levels a tilted plate. Grouping by y
+ * assumes a level plate, so a plate tilted by more than a few degrees is split
+ * into the wrong rows. Try every angle from -maxDeg to maxDeg, keep the ones that
+ * give one or two rows, and take the smallest angle whose rows are within
+ * `tolerance` of the tightest fit. Fewer than 4 boxes: no rotation.
+ * Rotate the boxes by the result before grouping.
+ * A BRTA plate has one or two rows, which is why more than two is rejected.
+ */
+export function estimateTilt(
+  dets: readonly Detection[],
+  maxDeg: number = 35,
+  tolerance: number = 1.15,
+): number {
+  if (dets.length < 4) {
+    return 0;
+  }
+  const fits: { deg: number; score: number }[] = [];
+  for (let deg = -maxDeg; deg <= maxDeg; deg++) {
+    const lines = groupIntoLines(rotateDetections(dets, deg));
+    if (lines.length <= 2) {
+      fits.push({ deg, score: rowScatter(lines) });
+    }
+  }
+  if (fits.length === 0) {
+    return 0;
+  }
+  const best = Math.min(...fits.map(f => f.score));
+  let pick = 0;
+  let found = false;
+  for (const f of fits) {
+    if (f.score <= best * tolerance + 1e-9 && (!found || Math.abs(f.deg) < Math.abs(pick))) {
+      pick = f.deg;
+      found = true;
+    }
+  }
+  return pick;
+}
+
+/** Group into lines after levelling a tilted plate. */
+export function groupLevelLines(dets: readonly Detection[]): Detection[][] {
+  return groupIntoLines(rotateDetections(dets, estimateTilt(dets)));
+}
+
 /** Map each detection to its class name. Unknown ids become '?'. */
 export function linesToNames(
   lines: readonly (readonly Detection[])[],
@@ -164,7 +240,7 @@ export function readPlateText(
   minConf: number = 0,
 ): string {
   const kept = dets.filter(d => d.conf >= minConf);
-  const lines = groupIntoLines(kept);
+  const lines = groupLevelLines(kept);
   return formatPlate(linesToNames(lines, names), display);
 }
 
@@ -175,7 +251,7 @@ export function plateTokens(
   minConf: number = 0,
 ): string[] {
   const kept = dets.filter(d => d.conf >= minConf);
-  return flatten(linesToNames(groupIntoLines(kept), names));
+  return flatten(linesToNames(groupLevelLines(kept), names));
 }
 
 export function editDistance(a: readonly string[], b: readonly string[]): number {
@@ -218,7 +294,7 @@ export function readPlateDetailed(
   minConf: number = 0,
 ): PlateRead {
   const kept = dets.filter(d => d.conf >= minConf);
-  const lines = groupIntoLines(kept);
+  const lines = groupLevelLines(kept);
   const namesByLine = linesToNames(lines, names);
   return {
     text: formatPlate(namesByLine, display),
