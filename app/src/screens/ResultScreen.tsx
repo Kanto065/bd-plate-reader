@@ -20,6 +20,7 @@ export default function ResultScreen({ navigation, route }: Props) {
   const { imageUri, source } = route.params;
   const [text, setText] = useState('');
   const [lowConfidence, setLowConfidence] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,17 +28,20 @@ export default function ResultScreen({ navigation, route }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     readPlate(imageUri)
       .then(result => {
         if (!cancelled) {
           setText(result.text);
           setLowConfidence(result.lowConfidence);
+          setError(result.error ?? null);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setText('');
           setLowConfidence(true);
+          setError('This photo could not be read.');
         }
       })
       .finally(() => {
@@ -86,6 +90,7 @@ export default function ResultScreen({ navigation, route }: Props) {
         style={styles.preview}
         resizeMode="contain"
       />
+      {!loading && error ? <Text style={styles.error}>{error}</Text> : null}
       {!loading && lowConfidence ? (
         <Text style={styles.hint}>Check the characters before copying</Text>
       ) : null}
@@ -128,6 +133,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#fff4d6',
     color: '#7a5200',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  error: {
+    marginTop: 16,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#fde2e2',
+    color: '#8a1c1c',
     fontSize: 15,
     fontWeight: '600',
   },

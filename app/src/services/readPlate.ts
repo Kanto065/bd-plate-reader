@@ -19,6 +19,8 @@ export const PLACEHOLDER_PLATE = 'ঢাকা মেট্রো-ঘ ১১-২
 export interface PlateResult {
   text: string;
   lowConfidence: boolean;
+  /** Set when reading failed, so the screen can say why instead of staying blank. */
+  error?: string;
 }
 
 export async function readPlate(imageUri: string): Promise<PlateResult> {
@@ -27,7 +29,7 @@ export async function readPlate(imageUri: string): Promise<PlateResult> {
     models = await loadModels();
   } catch (error) {
     console.warn('Could not load the models', error);
-    return { text: '', lowConfidence: true };
+    return { text: '', lowConfidence: true, error: 'The plate models failed to load.' };
   }
   if (!models) {
     await new Promise<void>(resolve => setTimeout(resolve, 400));
@@ -39,6 +41,6 @@ export async function readPlate(imageUri: string): Promise<PlateResult> {
     return { text: result.text, lowConfidence: result.lowConfidence };
   } catch (error) {
     console.warn('Plate reading failed', error);
-    return { text: '', lowConfidence: true };
+    return { text: '', lowConfidence: true, error: 'This photo could not be read.' };
   }
 }
