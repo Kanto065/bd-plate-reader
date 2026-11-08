@@ -58,3 +58,26 @@ index c2360f5..004f776 100644
 +    return context.resources.openRawResource(id).use { it.readBytes() }
 +  }
  }
+diff --git a/node_modules/react-native-fast-tflite/cpp/HybridTfliteModule.cpp b/node_modules/react-native-fast-tflite/cpp/HybridTfliteModule.cpp
+index 38c82d1..355833b 100644
+--- a/node_modules/react-native-fast-tflite/cpp/HybridTfliteModule.cpp
++++ b/node_modules/react-native-fast-tflite/cpp/HybridTfliteModule.cpp
+@@ -1,5 +1,7 @@
+ #include "HybridTfliteModule.hpp"
+ #include "TfliteHelpers.hpp"
++#include <algorithm>
++#include <thread>
+ 
+ #if defined(ANDROID)
+ #include <tflite/c/c_api.h>
+@@ -40,6 +42,10 @@ HybridTfliteModule::createModel(const std::shared_ptr<ArrayBuffer>& modelData,
+ 
+   // Configure interpreter via options
+   TfLiteInterpreterOptions* options = TfLiteInterpreterOptionsCreate();
++  // Default is one thread. Use up to 4 cores for the CPU kernels. More than 4
++  // rarely helps on phones and costs battery.
++  unsigned int cores = std::thread::hardware_concurrency();
++  TfLiteInterpreterOptionsSetNumThreads(options, (int)std::min(4u, std::max(1u, cores)));
+ 
+   // Add all hardware accelerated delegates (e.g. GPU, NPU, ...)
+   // if any. The default CPU delegate will always be available.
