@@ -16,6 +16,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ViewManager
 import java.io.File
@@ -59,6 +60,21 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   private fun upright(uri: Uri, maxSide: Int): Bitmap {
     cache?.let { (u, m, b) -> if (u == uri.toString() && m == maxSide) return b }
     return loadUpright(uri, maxSide).also { cache = Triple(uri.toString(), maxSide, it) }
+  }
+
+  /**
+   * Test only. The photos in the app's own external folder
+   * Android/data/<package>/files/selftest, which adb can fill. The self test
+   * reads them, so no photo picker or gallery is involved.
+   */
+  @ReactMethod
+  fun testFiles(promise: Promise) {
+    val dir = File(reactApplicationContext.getExternalFilesDir(null), "selftest")
+    val out: WritableArray = Arguments.createArray()
+    dir.listFiles { f -> f.extension.lowercase() in listOf("jpg", "jpeg", "png") }
+      ?.sortedBy { it.name }
+      ?.forEach { out.pushString("file://" + it.absolutePath) }
+    promise.resolve(out)
   }
 
   private fun open(uri: Uri) =

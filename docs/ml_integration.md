@@ -262,3 +262,17 @@ To regenerate: set `BD_EXPORT_DTYPE=dynamic` and run `training/export.py` (noteb
 Score any set of models with `training/pipeline_eval.py` and `BD_MODEL_SUFFIX`.
 The dynamic models were not timed on the phone before this change, see the
 timing numbers in the release notes.
+
+## Self test on a phone (test only)
+
+The app has a test only entry point so a phone can be tested from a PC without the photo
+picker or the gallery. The link `bdplate://selftest` makes the app read every photo in its
+own folder `Android/data/com.bdplatereader/files/selftest` and write one `SELFTEST` line per
+photo to logcat. Nothing is shown on screen and nothing is sent anywhere.
+
+Run it with `python training/phone_selftest.py PHOTO_DIR`. It pushes the photos, starts the
+link, waits for `SELFTEST_DONE`, prints a row per photo and, if the folder has a `truth.csv`,
+the exact match. Use the same folder with `training/pipeline_eval.py` to compare phone and PC.
+
+The Result screen also shows why a read is low confidence, under the "Check the characters"
+banner, for example `lowest character score 0.53 is under 0.6`.

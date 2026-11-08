@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StatusBar } from 'react-native';
+import { Linking, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import ResultScreen from './src/screens/ResultScreen';
 import { loadModels } from './src/ml/modelLoader';
+import { SELFTEST_URL, runSelfTest } from './src/dev/selfTest';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -16,6 +17,18 @@ function App() {
   // is reported later, when a photo is read.
   useEffect(() => {
     loadModels().catch(() => {});
+  }, []);
+
+  // Test only: bdplate://selftest reads the photos in the app's selftest folder.
+  useEffect(() => {
+    const handle = (url?: string | null) => {
+      if (url && url.startsWith(SELFTEST_URL)) {
+        runSelfTest();
+      }
+    };
+    Promise.resolve(Linking.getInitialURL()).then(handle);
+    const sub = Linking.addEventListener('url', e => handle(e.url));
+    return () => sub?.remove?.();
   }, []);
 
   return (

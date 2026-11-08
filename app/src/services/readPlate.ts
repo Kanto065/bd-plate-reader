@@ -22,6 +22,10 @@ export interface PlateResult {
   lowConfidence: boolean;
   /** Set when reading failed, so the screen can say why instead of staying blank. */
   error?: string;
+  /** Why the read is low confidence, in plain words. */
+  reasons?: string[];
+  /** Class names in reading order, used by the self test. */
+  tokens?: string[];
 }
 
 export async function readPlate(imageUri: string): Promise<PlateResult> {
@@ -45,7 +49,12 @@ export async function readPlate(imageUri: string): Promise<PlateResult> {
       'PLATE_TIMING',
       JSON.stringify({ totalMs: Date.now() - startedAt, ...getTiming() }),
     );
-    return { text: result.text, lowConfidence: result.lowConfidence };
+    return {
+      text: result.text,
+      lowConfidence: result.lowConfidence,
+      reasons: result.reasons,
+      tokens: result.tokens,
+    };
   } catch (error) {
     console.warn('Plate reading failed', error);
     return { text: '', lowConfidence: true, error: 'This photo could not be read.' };
