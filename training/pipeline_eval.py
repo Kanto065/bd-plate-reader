@@ -8,6 +8,8 @@ Needs only: pip install ai-edge-litert pillow numpy (no PyTorch or Ultralytics).
 It mirrors app/src/ml/plateReader.ts: letterbox to 640, plate detector, best box
 with 5 percent margin, letterbox the crop to 416, character detector, then
 postprocess.py for the reading order. MODELS_DIR defaults to app/assets/models.
+Set BD_MODEL_SUFFIX=fp16 to score plate_detector_fp16.tflite and char_detector_fp16.tflite
+(from export.py with BD_EXPORT_DTYPE=fp16) instead of the int8 files.
 
 Writes OUT_CSV (default predictions.csv) with one row per photo:
   file, tokens, text, plate_score, min_char_score, truth, match
@@ -133,8 +135,9 @@ def main():
     models = Path(sys.argv[3]) if len(sys.argv) > 3 else HERE.parent / "app" / "assets" / "models"
     names = pp.load_class_names(HERE / "classes.txt")
     display = pp.load_display(HERE / "class_display_bn.json")
-    plate_model = load_model(models / "plate_detector_int8.tflite")
-    char_model = load_model(models / "char_detector_int8.tflite")
+    suffix = os.environ.get("BD_MODEL_SUFFIX", "int8")
+    plate_model = load_model(models / ("plate_detector_%s.tflite" % suffix))
+    char_model = load_model(models / ("char_detector_%s.tflite" % suffix))
 
     truth = {}
     if (folder / "truth.csv").exists():
