@@ -196,3 +196,41 @@ test('crops the plate from the right place in a non square photo', async () => {
   expect(px(3, 208)).toBeLessThan(0.05); // left margin is outside the plate, blue
   expect(px(412, 208)).toBeLessThan(0.05); // right margin
 });
+
+test('runPipeline accepts an ImageSource and crops with the source dimensions', async () => {
+  const { letterbox } = require('../../src/ml/imageOps');
+  const calls: string[] = [];
+  const source = {
+    letterbox: async (size: number) => {
+      calls.push('letterbox' + size);
+      return { ...letterbox(grayImage(64, 48), size), srcWidth: 1000, srcHeight: 500 };
+    },
+    crop: () => {
+      calls.push('crop');
+      return source;
+    },
+  };
+  const plate = fakeModel(plateOutput(0.9), plateShape);
+  const chars = fakeModel(charOutput(charRows()), charShape);
+  const result = await runPipeline({ plate, chars }, source);
+  expect(result.plateFound).toBe(true);
+  expect(calls).toEqual(['letterbox640', 'crop', 'letterbox416']);
+});
+
+test('a planar native tensor skips the reorder, and fails on an NHWC model', async () => {
+  const { letterbox } = require('../../src/ml/imageOps');
+  const lb = { ...letterbox(grayImage(64, 48), 640), planar: true };
+  const source = {
+    letterbox: async (size: number) => ({ ...lb, size }),
+    crop: () => source,
+  };
+  const plate = fakeModel(plateOutput(0.9), plateShape);
+  const chars = fakeModel(charOutput(charRows()), charShape);
+  // The default fake models report NHWC input, which a planar tensor cannot feed.
+  await expect(runPipeline({ plate, chars }, source)).rejects.toThrow('planar');
+  plate.inputs = [{ dataType: 'float32', shape: [1, 3, 640, 640] }];
+  chars.inputs = [{ dataType: 'float32', shape: [1, 3, 416, 416] }];
+  await runPipeline({ plate, chars }, source);
+  // Passed through unchanged: same bytes as the tensor the source returned.
+  expect(new Float32Array(plate.lastInput!)).toEqual(lb.tensor);
+});

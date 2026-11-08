@@ -10,7 +10,7 @@
  * If the pipeline fails on a real photo, the result is empty text flagged as
  * low confidence. The placeholder is never shown in that case.
  */
-import { loadRgbImage } from '../ml/imageLoader';
+import { loadImageSource } from '../ml/imageLoader';
 import { loadModels } from '../ml/modelLoader';
 import { runPipeline } from '../ml/plateReader';
 import { getTiming, resetTiming, timedAsync } from '../ml/timing';
@@ -39,7 +39,7 @@ export async function readPlate(imageUri: string): Promise<PlateResult> {
     return { text: PLACEHOLDER_PLATE, lowConfidence: false };
   }
   try {
-    const image = await loadRgbImage(imageUri);
+    const image = await loadImageSource(imageUri);
     const result = await runPipeline(models, image);
     console.log(
       'PLATE_TIMING',

@@ -72,22 +72,52 @@ test('rejects images above the pixel limit before decoding', () => {
   expect(() => decodeJpegBytes(bytes)).toThrow(/too large/);
 });
 
-describe('native decoder', () => {
+describe('native image source', () => {
   const { NativeModules } = require('react-native');
   afterEach(() => {
     delete NativeModules.PlateImage;
   });
 
-  test('loadRgbImage uses the native decoder and turns base64 into RGB bytes', async () => {
-    const { loadRgbImage, NATIVE_MAX_SIDE } = require('../../src/ml/imageLoader');
-    // Two pixels: red, then blue.
-    const data = '/wAAAAD/'; // bytes 255,0,0,0,0,255
-    const decode = jest.fn().mockResolvedValue({ width: 2, height: 1, data });
-    NativeModules.PlateImage = { decode };
-    const img = await loadRgbImage('file:///photo.jpg');
-    expect(decode).toHaveBeenCalledWith('file:///photo.jpg', NATIVE_MAX_SIDE);
-    expect(img.width).toBe(2);
-    expect(img.height).toBe(1);
-    expect(Array.from(img.data)).toEqual([255, 0, 0, 0, 0, 255]);
+  // The native module writes a planar float32 file and returns its path.
+  const reply = {
+    srcWidth: 400,
+    srcHeight: 300,
+    scale: 0.5,
+    padX: 1,
+    padY: 2,
+    path: 'file:///cache/plate_input_640.f32',
+  };
+
+  function setup() {
+    jest.resetModules();
+    const loadAsset = jest
+      .fn()
+      .mockResolvedValue(new Float32Array([1, 0, 0, 0, 0, 1]).buffer);
+    jest.doMock('react-native-nitro-modules', () => ({
+      NitroModules: { createHybridObject: () => ({ loadAsset }) },
+    }));
+    const letterbox = jest.fn().mockResolvedValue(reply);
+    // The module registry was reset, so use the same NativeModules as the loader.
+    require('react-native').NativeModules.PlateImage = { letterbox };
+    const loader = require('../../src/ml/imageLoader');
+    return { loader, letterbox, loadAsset };
+  }
+
+  test('letterbox returns the native file as a planar tensor', async () => {
+    const { loader, letterbox, loadAsset } = setup();
+    const lb = await (await loader.loadImageSource('file:///p.jpg')).letterbox(640);
+    expect(letterbox).toHaveBeenCalledWith('file:///p.jpg', loader.NATIVE_MAX_SIDE, 640, null);
+    expect(loadAsset).toHaveBeenCalledWith(reply.path);
+    expect(Array.from(lb.tensor)).toEqual([1, 0, 0, 0, 0, 1]);
+    expect(lb.planar).toBe(true);
+    expect([lb.size, lb.scale, lb.padX, lb.padY]).toEqual([640, 0.5, 1, 2]);
+    expect([lb.srcWidth, lb.srcHeight]).toEqual([400, 300]);
+  });
+
+  test('crop passes the box to the native module', async () => {
+    const { loader, letterbox } = setup();
+    const source = await loader.loadImageSource('file:///p.jpg');
+    await source.crop({ x1: 10, y1: 20, x2: 110, y2: 60 }).letterbox(416);
+    expect(letterbox).toHaveBeenCalledWith('file:///p.jpg', loader.NATIVE_MAX_SIDE, 416, [10, 20, 110, 60]);
   });
 });

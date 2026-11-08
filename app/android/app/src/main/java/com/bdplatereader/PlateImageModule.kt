@@ -2,10 +2,12 @@ package com.bdplatereader
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Rect
 import android.media.ExifInterface
 import android.net.Uri
-import android.util.Base64
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.NativeModule
@@ -13,24 +15,35 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.ViewManager
+import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
- * Decodes a photo with the platform JPEG decoder, applies the EXIF rotation and
- * shrinks it so the long side is at most maxSide. Returns upright RGB bytes as
- * base64. This replaces the slow JavaScript decode.
+ * Photo handling for the plate reader, done with the platform decoder instead of
+ * JavaScript. letterbox() decodes the photo upright (EXIF applied), optionally
+ * crops a box, letterboxes it to a size x size square with gray padding, and
+ * writes it as the model input: planar RGB (CHW) float32 in 0..1, in a cache
+ * file. JavaScript reads the file as a raw buffer, with no per pixel work.
  */
 class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   override fun getName() = "PlateImage"
 
+  /** crop is [x1, y1, x2, y2] in pixels of the upright decoded photo, or null. */
   @ReactMethod
-  fun decode(uri: String, maxSide: Int, promise: Promise) {
+  fun letterbox(uri: String, maxSide: Int, size: Int, crop: ReadableArray?, promise: Promise) {
     Thread {
       try {
-        promise.resolve(decodeUpright(Uri.parse(uri), maxSide))
+        promise.resolve(letterboxed(Uri.parse(uri), maxSide, size, crop))
       } catch (e: Throwable) {
         promise.reject("E_DECODE", e.message, e)
       }
@@ -41,7 +54,7 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     reactApplicationContext.contentResolver.openInputStream(uri)
       ?: throw IOException("Cannot open $uri")
 
-  private fun decodeUpright(uri: Uri, maxSide: Int) = run {
+  private fun loadUpright(uri: Uri, maxSide: Int): Bitmap {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     open(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
     if (bounds.outWidth <= 0) throw IOException("Not an image")
@@ -69,23 +82,53 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }
     val s = min(1f, maxSide.toFloat() / max(raw.width, raw.height))
     m.postScale(s, s)
-    val out = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+    return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+  }
 
-    val w = out.width
-    val h = out.height
-    val px = IntArray(w * h)
-    out.getPixels(px, 0, w, 0, 0, w, h)
-    val rgb = ByteArray(w * h * 3)
-    for (i in px.indices) {
-      val p = px[i]
-      rgb[i * 3] = (p shr 16).toByte()
-      rgb[i * 3 + 1] = (p shr 8).toByte()
-      rgb[i * 3 + 2] = p.toByte()
+  private fun letterboxed(uri: Uri, maxSide: Int, size: Int, crop: ReadableArray?): WritableMap {
+    var bmp = loadUpright(uri, maxSide)
+    val srcWidth = bmp.width
+    val srcHeight = bmp.height
+    if (crop != null) {
+      // Same rounding and clamping as the JavaScript cropRgb.
+      val x1 = max(0, min(bmp.width - 1, floor(crop.getDouble(0)).toInt()))
+      val y1 = max(0, min(bmp.height - 1, floor(crop.getDouble(1)).toInt()))
+      val x2 = max(x1 + 1, min(bmp.width, ceil(crop.getDouble(2)).toInt()))
+      val y2 = max(y1 + 1, min(bmp.height, ceil(crop.getDouble(3)).toInt()))
+      bmp = Bitmap.createBitmap(bmp, x1, y1, x2 - x1, y2 - y1)
     }
-    Arguments.createMap().apply {
-      putInt("width", w)
-      putInt("height", h)
-      putString("data", Base64.encodeToString(rgb, Base64.NO_WRAP))
+
+    val scale = min(size.toFloat() / bmp.width, size.toFloat() / bmp.height)
+    val newW = max(1, (bmp.width * scale).roundToInt())
+    val newH = max(1, (bmp.height * scale).roundToInt())
+    val padX = (size - newW) / 2
+    val padY = (size - newH) / 2
+    val square = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(square)
+    canvas.drawColor(0xFF727272.toInt()) // Ultralytics letterbox gray, 114
+    canvas.drawBitmap(bmp, null, Rect(padX, padY, padX + newW, padY + newH), Paint(Paint.FILTER_BITMAP_FLAG))
+
+    val px = IntArray(size * size)
+    square.getPixels(px, 0, size, 0, 0, size, size)
+    val plane = size * size
+    val bytes = ByteBuffer.allocate(plane * 3 * 4).order(ByteOrder.nativeOrder())
+    val buf = bytes.asFloatBuffer()
+    for (i in 0 until plane) {
+      val p = px[i]
+      buf.put(i, ((p shr 16) and 0xFF) / 255f)
+      buf.put(plane + i, ((p shr 8) and 0xFF) / 255f)
+      buf.put(2 * plane + i, (p and 0xFF) / 255f)
+    }
+    // One file per size, so the plate (640) and the crop (416) do not collide.
+    val file = File(reactApplicationContext.cacheDir, "plate_input_$size.f32")
+    file.writeBytes(bytes.array())
+    return Arguments.createMap().apply {
+      putInt("srcWidth", srcWidth)
+      putInt("srcHeight", srcHeight)
+      putDouble("scale", scale.toDouble())
+      putInt("padX", padX)
+      putInt("padY", padY)
+      putString("path", "file://" + file.absolutePath)
     }
   }
 }

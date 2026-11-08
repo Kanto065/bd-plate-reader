@@ -211,6 +211,11 @@ export interface Letterboxed {
   scale: number;
   padX: number;
   padY: number;
+  /** True when the tensor is already planar NCHW, as the native module writes it. */
+  planar?: boolean;
+  /** Size of the image that was letterboxed, before any padding. */
+  srcWidth: number;
+  srcHeight: number;
 }
 
 /** Gray used by Ultralytics for letterbox padding, 114 of 255. */
@@ -264,7 +269,32 @@ export function letterbox(img: RgbImage, size: number): Letterboxed {
       }
     }
   }
-  return { tensor, size, scale, padX, padY };
+  return {
+    tensor,
+    size,
+    scale,
+    padX,
+    padY,
+    srcWidth: img.width,
+    srcHeight: img.height,
+  };
+}
+
+/**
+ * What the pipeline needs from a photo: a letterboxed tensor, and a cropped
+ * copy of itself. rgbSource does it in JavaScript. On Android the native
+ * module does it, so no full size pixels ever reach JavaScript.
+ */
+export interface ImageSource {
+  letterbox(size: number): Promise<Letterboxed>;
+  crop(box: PixelBox): ImageSource;
+}
+
+export function rgbSource(img: RgbImage): ImageSource {
+  return {
+    letterbox: async size => letterbox(img, size),
+    crop: box => rgbSource(cropRgb(img, box)),
+  };
 }
 
 /** Reorder an interleaved HWC tensor (size x size x 3) to planar CHW. */

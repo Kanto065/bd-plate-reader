@@ -11,11 +11,12 @@
 import { assessConfidence } from './confidence';
 import { CLASS_DISPLAY, CLASS_NAMES } from './classes';
 import {
+  ImageSource,
+  Letterboxed,
   RgbImage,
-  cropRgb,
   hwcToChw,
-  letterbox,
   padBox,
+  rgbSource,
   unletterboxBox,
 } from './imageOps';
 import { readPlateDetailed } from './postprocess';
@@ -95,7 +96,7 @@ export interface PipelineResult {
 
 async function detect(
   model: ModelHandle,
-  tensor: Float32Array,
+  lb: Letterboxed,
   stage: StageConfig,
   name: string,
 ) {
@@ -104,8 +105,12 @@ async function detect(
   // take [1, H, W, 3]. The letterbox tensor is HWC, so reorder when needed.
   const inShape = model.inputs[0]?.shape ?? [];
   const planar = inShape.length === 4 && inShape[1] === 3 && inShape[3] !== 3;
+  if (lb.planar && !planar) {
+    throw new Error('The image is planar but the model expects NHWC');
+  }
   const input = timed(name + 'Prep', () => {
-    const ordered = planar ? hwcToChw(tensor, stage.inputSize) : tensor;
+    const ordered =
+      planar && !lb.planar ? hwcToChw(lb.tensor, stage.inputSize) : lb.tensor;
     return floatToBuffer(ordered, inType, stage.inputQuant);
   });
   const outputs = await timedAsync(name + 'Run', () => model.run([input]));
@@ -129,14 +134,15 @@ async function detect(
 
 export async function runPipeline(
   models: ModelPair,
-  image: RgbImage,
+  image: RgbImage | ImageSource,
   config: PipelineConfig = DEFAULT_PIPELINE_CONFIG,
 ): Promise<PipelineResult> {
+  const source = 'letterbox' in image ? image : rgbSource(image);
   // Stage 1: find the plate.
-  const lb = timed('plateLetterbox', () =>
-    letterbox(image, config.plate.inputSize),
+  const lb = await timedAsync('plateLetterbox', () =>
+    source.letterbox(config.plate.inputSize),
   );
-  const plates = await detect(models.plate, lb.tensor, config.plate, 'plate');
+  const plates = await detect(models.plate, lb, config.plate, 'plate');
   if (plates.length === 0) {
     return {
       text: '',
@@ -149,16 +155,16 @@ export async function runPipeline(
   const box = padBox(
     unletterboxBox(lb, best.x, best.y, best.w, best.h),
     config.platePadding,
-    image.width,
-    image.height,
+    lb.srcWidth,
+    lb.srcHeight,
   );
-  const crop = timed('crop', () => cropRgb(image, box));
+  const crop = source.crop(box);
 
   // Stage 2: read the characters on the crop.
-  const clb = timed('charLetterbox', () =>
-    letterbox(crop, config.chars.inputSize),
+  const clb = await timedAsync('charLetterbox', () =>
+    crop.letterbox(config.chars.inputSize),
   );
-  const chars = await detect(models.chars, clb.tensor, config.chars, 'char');
+  const chars = await detect(models.chars, clb, config.chars, 'char');
 
   const read = readPlateDetailed(
     chars,
