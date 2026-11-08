@@ -208,3 +208,22 @@ plus the model time. This has not been measured.
   A plate far from the camera may have too few pixels. Check recall on small
   plates.
 * The camera format filter (`useCameraFormat`) is untested on the device.
+
+## Patch to react-native-fast-tflite
+
+`app/patches/react-native-fast-tflite+3.0.1.patch` is applied by `patch-package` in the
+`postinstall` script, on every `npm install` and `npm ci`, including CI. It changes three
+things in the library. Check them again before upgrading the library, and delete the patch
+if a new version fixes them.
+
+1. **Release builds could not load the models.** React Native turns a bundled model into a
+   bare Android resource name in release builds. The library read it with `java.net.URL`,
+   which threw `MalformedURLException: no protocol`. The patched `HybridAssetLoader.kt`
+   reads a name without `://` from the app's raw resources, and still reads real URLs.
+2. **LiteRT 1.4.0 failed with `Input tensor ... lacks data`** on the exported models. The
+   patch moves the Android LiteRT dependency to 1.4.2 in `android/build.gradle`.
+3. **Single thread.** The library never set a thread count, so TFLite used one CPU thread.
+   `HybridTfliteModule.cpp` now sets up to 4 threads.
+
+The app also reads raw files through the same native `AssetLoader`
+(`readFile` in `app/src/ml/imageLoader.ts`), so it depends on item 1 staying in place.
