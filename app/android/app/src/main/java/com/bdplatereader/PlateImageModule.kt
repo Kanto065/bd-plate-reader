@@ -50,6 +50,17 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }.start()
   }
 
+  // The plate stage and the character stage both need the same decoded photo, so
+  // keep the last one.
+  // shortcut: holds one decoded photo (about 13 MB) until the next photo, clear it on low memory if that becomes a problem.
+  private var cache: Triple<String, Int, Bitmap>? = null
+
+  @Synchronized
+  private fun upright(uri: Uri, maxSide: Int): Bitmap {
+    cache?.let { (u, m, b) -> if (u == uri.toString() && m == maxSide) return b }
+    return loadUpright(uri, maxSide).also { cache = Triple(uri.toString(), maxSide, it) }
+  }
+
   private fun open(uri: Uri) =
     reactApplicationContext.contentResolver.openInputStream(uri)
       ?: throw IOException("Cannot open $uri")
@@ -86,7 +97,7 @@ class PlateImageModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   private fun letterboxed(uri: Uri, maxSide: Int, size: Int, crop: ReadableArray?): WritableMap {
-    var bmp = loadUpright(uri, maxSide)
+    var bmp = upright(uri, maxSide)
     val srcWidth = bmp.width
     val srcHeight = bmp.height
     if (crop != null) {
