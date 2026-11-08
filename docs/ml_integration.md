@@ -227,3 +227,38 @@ if a new version fixes them.
 
 The app also reads raw files through the same native `AssetLoader`
 (`readFile` in `app/src/ml/imageLoader.ts`), so it depends on item 1 staying in place.
+
+## Model precision: dynamic range instead of int8
+
+`app/assets/models/*_int8.tflite` now holds the **dynamic range** exports, not full int8.
+The file names stay the same because the app, `link-models.js` and CI load those names.
+Dynamic range means int8 weights with float activations (Ultralytics `quantize="w8a32"`),
+so the files are still about 3 MB each.
+
+Why: the full int8 export squeezed the confidence output into a few levels. The plate
+score topped out at 0.50 on every photo with about 9 candidates tied, and a character
+crop had only 8 to 18 distinct scores. NMS could not rank tied candidates, and photos
+with a second, smaller plate in the background were read from an arbitrary plate.
+The dynamic export gives 0.77 to 0.85 plate scores with one clear winner and about 99
+distinct character scores per crop, and matches the fp32 export exactly.
+
+Measured on 64 hand labeled photos that the models never saw (bikes and private
+vehicles from the Mendeley "Vehicle License Plate Detection Dataset V1", only
+legible plates labeled, so the numbers are slightly optimistic):
+
+| Model | Exact match | Character error rate |
+|---|---|---|
+| full int8 | 87.5% | 3.3% |
+| dynamic range | 95.3% | 1.6% |
+| fp32 (reference) | 95.3% | 1.6% |
+
+The confidence rule in `ml/confidence.ts` (flag when any character scores below 0.6)
+still fits the new scores. It flags 5 of 64 photos and catches 2 of the 3 wrong plates.
+The third, a confident Ga read as Kha, cannot be caught by a score.
+
+To regenerate: set `BD_EXPORT_DTYPE=dynamic` and run `training/export.py` (notebook
+`training/colab_export_modes.ipynb`), then copy `plate_detector_dynamic.tflite` and
+`char_detector_dynamic.tflite` over the `_int8` names in `app/assets/models`.
+Score any set of models with `training/pipeline_eval.py` and `BD_MODEL_SUFFIX`.
+The dynamic models were not timed on the phone before this change, see the
+timing numbers in the release notes.
