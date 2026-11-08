@@ -1,0 +1,60 @@
+diff --git a/node_modules/react-native-fast-tflite/android/build.gradle b/node_modules/react-native-fast-tflite/android/build.gradle
+index 2e0abd0..b35fad2 100644
+--- a/node_modules/react-native-fast-tflite/android/build.gradle
++++ b/node_modules/react-native-fast-tflite/android/build.gradle
+@@ -133,14 +133,14 @@ dependencies {
+   implementation project(":react-native-nitro-modules")
+ 
+   // Tensorflow Lite .aar (includes C API via prefabs)
+-  implementation "com.google.ai.edge.litert:litert:1.4.0"
+-  extractSO("com.google.ai.edge.litert:litert:1.4.0")
+-  extractHeaders("com.google.ai.edge.litert:litert:1.4.0")
++  implementation "com.google.ai.edge.litert:litert:1.4.2"
++  extractSO("com.google.ai.edge.litert:litert:1.4.2")
++  extractHeaders("com.google.ai.edge.litert:litert:1.4.2")
+ 
+   // Tensorflow Lite GPU delegate
+-  implementation "com.google.ai.edge.litert:litert-gpu:1.4.0"
+-  extractSO("com.google.ai.edge.litert:litert-gpu:1.4.0")
+-  extractHeaders("com.google.ai.edge.litert:litert-gpu:1.4.0")
++  implementation "com.google.ai.edge.litert:litert-gpu:1.4.2"
++  extractSO("com.google.ai.edge.litert:litert-gpu:1.4.2")
++  extractHeaders("com.google.ai.edge.litert:litert-gpu:1.4.2")
+ }
+ 
+ // Clean leftover empty directories
+diff --git a/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt b/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt
+index c2360f5..004f776 100644
+--- a/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt
++++ b/node_modules/react-native-fast-tflite/android/src/main/java/com/margelo/nitro/tflite/HybridAssetLoader.kt
+@@ -2,6 +2,7 @@ package com.margelo.nitro.tflite
+ 
+ import androidx.annotation.Keep
+ import com.facebook.proguard.annotations.DoNotStrip
++import com.margelo.nitro.NitroModules
+ import com.margelo.nitro.core.ArrayBuffer
+ import com.margelo.nitro.core.Promise
+ import java.net.URL
+@@ -11,8 +12,21 @@ import java.net.URL
+ class HybridAssetLoader : HybridAssetLoaderSpec() {
+   override fun loadAsset(path: String): Promise<ArrayBuffer> {
+     return Promise.async {
+-      val bytes = URL(path).readBytes()
++      // A URL (http in debug builds, file or content) is read as before. In a
++      // release build React Native resolves a bundled asset to a bare Android
++      // raw resource name with no scheme, which URL() rejects.
++      val bytes = if (path.contains("://")) URL(path).readBytes() else readRawResource(path)
+       return@async ArrayBuffer.copy(bytes)
+     }
+   }
++
++  private fun readRawResource(name: String): ByteArray {
++    val context = NitroModules.applicationContext
++      ?: throw Error("No application context to load the model resource $name")
++    val id = context.resources.getIdentifier(name, "raw", context.packageName)
++    if (id == 0) {
++      throw Error("Model resource not found in res/raw: $name")
++    }
++    return context.resources.openRawResource(id).use { it.readBytes() }
++  }
+ }

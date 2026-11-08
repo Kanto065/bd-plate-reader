@@ -10,6 +10,7 @@
     "gen:classes": "node scripts/gen-classes.js",
     "check:classes": "node scripts/gen-classes.js check",
     "link:models": "node scripts/link-models.js",
+    "postinstall": "patch-package",
     "test": "jest"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "@types/react-test-renderer": "^19.1.0",
     "eslint": "^8.19.0",
     "jest": "^29.6.3",
+    "patch-package": "^8.0.1",
     "prettier": "2.8.8",
     "react-test-renderer": "19.3.0",
     "typescript": "^6.0.3"
