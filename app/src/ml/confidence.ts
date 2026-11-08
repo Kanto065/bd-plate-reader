@@ -49,7 +49,8 @@ export function assessConfidence(
     reasons.push('scores do not match characters');
   }
   if (scores.some(s => !(s >= opts.minCharScore))) {
-    reasons.push('a character score is low');
+    const lowest = Math.min(...scores).toFixed(2);
+    reasons.push('lowest character score ' + lowest + ' is under ' + opts.minCharScore);
   }
   if (tokens.includes('?')) {
     reasons.push('unknown character');

@@ -92,6 +92,8 @@ export interface PipelineResult {
   /** False when the plate detector found nothing. */
   plateFound: boolean;
   reasons: string[];
+  /** Class names in reading order, for example Dhaka Metro Ga 2 7 8 4 7 6. */
+  tokens: string[];
 }
 
 async function detect(
@@ -149,6 +151,7 @@ export async function runPipeline(
       lowConfidence: true,
       plateFound: false,
       reasons: ['no plate found'],
+      tokens: [],
     };
   }
   const best = plates[0]; // nms returns the highest score first
@@ -181,5 +184,11 @@ export async function runPipeline(
     low = true;
     reasons.push('plate detection score is low');
   }
-  return { text: read.text, lowConfidence: low, plateFound: true, reasons };
+  return {
+    text: read.text,
+    lowConfidence: low,
+    plateFound: true,
+    reasons,
+    tokens: read.tokens,
+  };
 }

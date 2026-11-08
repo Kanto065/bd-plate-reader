@@ -21,6 +21,7 @@ export default function ResultScreen({ navigation, route }: Props) {
   const [text, setText] = useState('');
   const [lowConfidence, setLowConfidence] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reasons, setReasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,12 +30,14 @@ export default function ResultScreen({ navigation, route }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setReasons([]);
     readPlate(imageUri)
       .then(result => {
         if (!cancelled) {
           setText(result.text);
           setLowConfidence(result.lowConfidence);
           setError(result.error ?? null);
+          setReasons(result.reasons ?? []);
         }
       })
       .catch(() => {
@@ -94,6 +97,9 @@ export default function ResultScreen({ navigation, route }: Props) {
       {!loading && !error && lowConfidence ? (
         <Text style={styles.hint}>Check the characters before copying</Text>
       ) : null}
+      {!loading && !error && lowConfidence && reasons.length > 0 ? (
+        <Text style={styles.reasons}>{reasons.join('. ')}</Text>
+      ) : null}
       <Text style={styles.label}>Plate text (you can edit it)</Text>
       {loading ? (
         <ActivityIndicator size="large" color="#0b6e4f" style={styles.loader} />
@@ -145,6 +151,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  reasons: { marginTop: 6, color: '#7a5200', fontSize: 13 },
   label: { fontSize: 14, color: '#555555', marginTop: 20, marginBottom: 6 },
   loader: { marginVertical: 24 },
   input: {
