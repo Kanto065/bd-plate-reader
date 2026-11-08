@@ -1,11 +1,13 @@
 import {
   Detection,
   editDistance,
+  estimateTilt,
   groupIntoLines,
   median,
   plateTokens,
   readPlateDetailed,
   readPlateText,
+  rotateDetections,
 } from '../../src/ml/postprocess';
 import { CLASS_DISPLAY, CLASS_NAMES } from '../../src/ml/classes';
 
@@ -165,4 +167,40 @@ test('median', () => {
 
 test('display map covers every class name', () => {
   expect(CLASS_NAMES.filter(n => !(n in CLASS_DISPLAY))).toEqual([]);
+});
+
+// A plate seen from a tilted phone is a level plate rotated by some angle.
+const tilted = (dets: Detection[], deg: number) => rotateDetections(dets, deg);
+
+test('estimateTilt is zero for level plates', () => {
+  expect(estimateTilt(twoLinePlate())).toBe(0);
+  expect(estimateTilt(singleLinePlate())).toBe(0);
+  expect(estimateTilt(twoLinePlate().slice(0, 3))).toBe(0); // too few boxes
+});
+
+test('a tilted two line plate reads the same as a level one', () => {
+  const level = plateTokens(twoLinePlate(), CLASS_NAMES);
+  for (const deg of [-25, -15, -8, 8, 15, 25]) {
+    expect(plateTokens(tilted(twoLinePlate(), deg), CLASS_NAMES)).toEqual(level);
+  }
+});
+
+test('a tilted single line plate reads the same as a level one', () => {
+  const level = plateTokens(singleLinePlate(), CLASS_NAMES);
+  for (const deg of [-20, 12, 30]) {
+    expect(plateTokens(tilted(singleLinePlate(), deg), CLASS_NAMES)).toEqual(level);
+  }
+});
+
+test('estimateTilt finds the angle', () => {
+  // Rotating by +15 degrees must be undone by about -15.
+  expect(Math.abs(estimateTilt(tilted(twoLinePlate(), 15)) + 15)).toBeLessThanOrEqual(3);
+});
+
+test('plain grouping breaks when tilted but the reader does not', () => {
+  const plate = tilted(twoLinePlate(), 20);
+  expect(groupIntoLines(plate).length).toBeGreaterThan(2);
+  expect(readPlateText(plate, CLASS_NAMES)).toBe(
+    readPlateText(twoLinePlate(), CLASS_NAMES),
+  );
 });

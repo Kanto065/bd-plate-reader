@@ -103,3 +103,37 @@ def test_display_map_covers_every_class_name():
 def test_display_json_is_valid_utf8():
     with open(os.path.join(HERE, "class_display_bn.json"), encoding="utf-8") as f:
         assert isinstance(json.load(f), dict)
+
+
+def tilted(dets, deg):
+    """Rotate a level plate by deg, like a plate seen from a tilted phone."""
+    return pp.rotate_detections(dets, deg)
+
+
+def test_estimate_tilt_is_zero_for_level_plates():
+    assert pp.estimate_tilt(two_line_plate()) == 0
+    assert pp.estimate_tilt(single_line_plate()) == 0
+    assert pp.estimate_tilt(two_line_plate()[:3]) == 0  # too few boxes
+
+
+def test_tilted_two_line_plate_reads_the_same_as_level():
+    level = pp.plate_tokens(two_line_plate(), NAMES)
+    for deg in (-25, -15, -8, 8, 15, 25):
+        assert pp.plate_tokens(tilted(two_line_plate(), deg), NAMES) == level, deg
+
+
+def test_tilted_single_line_plate_reads_the_same_as_level():
+    level = pp.plate_tokens(single_line_plate(), NAMES)
+    for deg in (-20, 12, 30):
+        assert pp.plate_tokens(tilted(single_line_plate(), deg), NAMES) == level, deg
+
+
+def test_estimate_tilt_finds_the_angle():
+    # Rotating by +15 degrees must be undone by about -15.
+    assert abs(pp.estimate_tilt(tilted(two_line_plate(), 15)) + 15) <= 3
+
+
+def test_plain_grouping_breaks_when_tilted_but_the_reader_does_not():
+    plate = tilted(two_line_plate(), 20)
+    assert len(pp.group_into_lines(plate)) > 2
+    assert pp.read_plate(plate, NAMES) == pp.read_plate(two_line_plate(), NAMES)
