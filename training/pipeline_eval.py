@@ -8,8 +8,8 @@ Needs only: pip install ai-edge-litert pillow numpy (no PyTorch or Ultralytics).
 It mirrors app/src/ml/plateReader.ts: letterbox to 640, plate detector, best box
 with 5 percent margin, letterbox the crop to 416, character detector, then
 postprocess.py for the reading order. MODELS_DIR defaults to app/assets/models.
-Set BD_MODEL_SUFFIX=fp16 to score plate_detector_fp16.tflite and char_detector_fp16.tflite
-(from export.py with BD_EXPORT_DTYPE=fp16) instead of the int8 files.
+Set BD_MODEL_SUFFIX=dynamic (or fp32) to score plate_detector_dynamic.tflite and
+char_detector_dynamic.tflite (from export.py with BD_EXPORT_DTYPE=dynamic) instead of the int8 files.
 
 Writes OUT_CSV (default predictions.csv) with one row per photo:
   file, tokens, text, plate_score, min_char_score, truth, match
