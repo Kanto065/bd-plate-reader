@@ -72,22 +72,39 @@ test('rejects images above the pixel limit before decoding', () => {
   expect(() => decodeJpegBytes(bytes)).toThrow(/too large/);
 });
 
-describe('native decoder', () => {
+describe('native image source', () => {
   const { NativeModules } = require('react-native');
   afterEach(() => {
     delete NativeModules.PlateImage;
   });
 
-  test('loadRgbImage uses the native decoder and turns base64 into RGB bytes', async () => {
-    const { loadRgbImage, NATIVE_MAX_SIDE } = require('../../src/ml/imageLoader');
-    // Two pixels: red, then blue.
-    const data = '/wAAAAD/'; // bytes 255,0,0,0,0,255
-    const decode = jest.fn().mockResolvedValue({ width: 2, height: 1, data });
-    NativeModules.PlateImage = { decode };
-    const img = await loadRgbImage('file:///photo.jpg');
-    expect(decode).toHaveBeenCalledWith('file:///photo.jpg', NATIVE_MAX_SIDE);
-    expect(img.width).toBe(2);
-    expect(img.height).toBe(1);
-    expect(Array.from(img.data)).toEqual([255, 0, 0, 0, 0, 255]);
+  // A 2 x 1 letterbox: red pixel, then blue pixel (bytes 255,0,0,0,0,255).
+  const reply = {
+    srcWidth: 400,
+    srcHeight: 300,
+    scale: 0.5,
+    padX: 1,
+    padY: 2,
+    data: '/wAAAAD/',
+  };
+
+  test('letterbox asks the native module and returns a 0..1 tensor', async () => {
+    const { loadImageSource, NATIVE_MAX_SIDE } = require('../../src/ml/imageLoader');
+    const letterbox = jest.fn().mockResolvedValue(reply);
+    NativeModules.PlateImage = { letterbox };
+    const lb = await (await loadImageSource('file:///p.jpg')).letterbox(640);
+    expect(letterbox).toHaveBeenCalledWith('file:///p.jpg', NATIVE_MAX_SIDE, 640, null);
+    expect(Array.from(lb.tensor)).toEqual([1, 0, 0, 0, 0, 1]);
+    expect([lb.size, lb.scale, lb.padX, lb.padY]).toEqual([640, 0.5, 1, 2]);
+    expect([lb.srcWidth, lb.srcHeight]).toEqual([400, 300]);
+  });
+
+  test('crop passes the box to the native module', async () => {
+    const { loadImageSource, NATIVE_MAX_SIDE } = require('../../src/ml/imageLoader');
+    const letterbox = jest.fn().mockResolvedValue(reply);
+    NativeModules.PlateImage = { letterbox };
+    const source = await loadImageSource('file:///p.jpg');
+    await source.crop({ x1: 10, y1: 20, x2: 110, y2: 60 }).letterbox(416);
+    expect(letterbox).toHaveBeenCalledWith('file:///p.jpg', NATIVE_MAX_SIDE, 416, [10, 20, 110, 60]);
   });
 });

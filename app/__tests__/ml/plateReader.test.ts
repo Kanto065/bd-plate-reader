@@ -196,3 +196,23 @@ test('crops the plate from the right place in a non square photo', async () => {
   expect(px(3, 208)).toBeLessThan(0.05); // left margin is outside the plate, blue
   expect(px(412, 208)).toBeLessThan(0.05); // right margin
 });
+
+test('runPipeline accepts an ImageSource and crops with the source dimensions', async () => {
+  const { letterbox } = require('../../src/ml/imageOps');
+  const calls: string[] = [];
+  const source = {
+    letterbox: async (size: number) => {
+      calls.push('letterbox' + size);
+      return { ...letterbox(grayImage(64, 48), size), srcWidth: 1000, srcHeight: 500 };
+    },
+    crop: () => {
+      calls.push('crop');
+      return source;
+    },
+  };
+  const plate = fakeModel(plateOutput(0.9), plateShape);
+  const chars = fakeModel(charOutput(charRows()), charShape);
+  const result = await runPipeline({ plate, chars }, source);
+  expect(result.plateFound).toBe(true);
+  expect(calls).toEqual(['letterbox640', 'crop', 'letterbox416']);
+});

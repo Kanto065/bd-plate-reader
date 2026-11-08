@@ -11,11 +11,11 @@
 import { assessConfidence } from './confidence';
 import { CLASS_DISPLAY, CLASS_NAMES } from './classes';
 import {
+  ImageSource,
   RgbImage,
-  cropRgb,
   hwcToChw,
-  letterbox,
   padBox,
+  rgbSource,
   unletterboxBox,
 } from './imageOps';
 import { readPlateDetailed } from './postprocess';
@@ -129,12 +129,13 @@ async function detect(
 
 export async function runPipeline(
   models: ModelPair,
-  image: RgbImage,
+  image: RgbImage | ImageSource,
   config: PipelineConfig = DEFAULT_PIPELINE_CONFIG,
 ): Promise<PipelineResult> {
+  const source = 'letterbox' in image ? image : rgbSource(image);
   // Stage 1: find the plate.
-  const lb = timed('plateLetterbox', () =>
-    letterbox(image, config.plate.inputSize),
+  const lb = await timedAsync('plateLetterbox', () =>
+    source.letterbox(config.plate.inputSize),
   );
   const plates = await detect(models.plate, lb.tensor, config.plate, 'plate');
   if (plates.length === 0) {
@@ -149,14 +150,14 @@ export async function runPipeline(
   const box = padBox(
     unletterboxBox(lb, best.x, best.y, best.w, best.h),
     config.platePadding,
-    image.width,
-    image.height,
+    lb.srcWidth,
+    lb.srcHeight,
   );
-  const crop = timed('crop', () => cropRgb(image, box));
+  const crop = source.crop(box);
 
   // Stage 2: read the characters on the crop.
-  const clb = timed('charLetterbox', () =>
-    letterbox(crop, config.chars.inputSize),
+  const clb = await timedAsync('charLetterbox', () =>
+    crop.letterbox(config.chars.inputSize),
   );
   const chars = await detect(models.chars, clb.tensor, config.chars, 'char');
 
